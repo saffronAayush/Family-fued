@@ -3,30 +3,30 @@ export const server = import.meta.env.VITE_SERVER || "http://localhost:3000";
 
 export const gameResults = [
   {
-    question: "What’s the most common breakup reason in college?",
+    question: "What's the most common breakup reason in college?",
     topAnswers: [
-      { answer: "Cheating 💔", count: 26 },
-      { answer: "Exams 📚", count: 21 },
-      { answer: "Long distance 🛣️", count: 18 },
-      { answer: "Too clingy 😬", count: 14 },
-    ], // total = 79 (others got 9)
+      { answer: "Cheating 💔", count: 12 },
+      { answer: "Exams 📚", count: 8 },
+      { answer: "Long distance 🛣️", count: 5 },
+      { answer: "Too clingy 😬", count: 3 },
+    ], // total = 28
   },
   {
     question: "What do students actually mean by 'group study'?",
     topAnswers: [
-      { answer: "Gossip 🗣️", count: 24 },
-      { answer: "Snacks 🍔", count: 22 },
-      { answer: "Sleep 💤", count: 20 },
-      { answer: "Netflix 🍿", count: 15 },
-    ], // total = 81 (others got 7)
+      { answer: "Gossip 🗣️", count: 9 },
+      { answer: "Snacks 🍔", count: 7 },
+      { answer: "Sleep 💤", count: 4 },
+      { answer: "Netflix 🍿", count: 2 },
+    ], // total = 22
   },
   {
     question: "Name a place on campus where couples are always spotted.",
     topAnswers: [
-      { answer: "Garden 🌹", count: 28 },
-      { answer: "Canteen 🍵", count: 21 },
-      { answer: "Library 📚", count: 19 },
-      { answer: "Rooftop 🌌", count: 12 },
-    ], // total = 80 (others got 8)
+      { answer: "Garden 🌹", count: 11 },
+      { answer: "Canteen 🍵", count: 6 },
+      { answer: "Library 📚", count: 4 },
+      { answer: "Rooftop 🌌", count: 2 },
+    ], // total = 23
   },
 ];

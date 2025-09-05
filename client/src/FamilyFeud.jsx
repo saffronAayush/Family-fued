@@ -99,7 +99,11 @@ const FamilyFeudGame = () => {
 
   const handleStartGame = (e) => {
     e.preventDefault();
-    if (username.trim()) setStep("playing");
+    if (username.trim()) {
+      setStep("playing");
+      // Scroll to top when starting the game
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
   };
 
   const handleSelectAnswer = (answerText) => {
@@ -139,6 +143,8 @@ const FamilyFeudGame = () => {
         // Move to next question
         setCurrentQuestion(currentQuestion + 1);
         setSelectedAnswers([]);
+        // Scroll to top when moving to next question
+        window.scrollTo({ top: 0, behavior: "smooth" });
       }
     }
   };

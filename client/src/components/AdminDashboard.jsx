@@ -265,7 +265,7 @@ const AdminDashboard = () => {
                     <span className="font-semibold">{answer}</span>
                     {isRevealed && (
                       <div className="text-green-400 font-bold">
-                        {revealedAnswer.count}/88
+                        {revealedAnswer.count}/28
                       </div>
                     )}
                   </div>
