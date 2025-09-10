@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
-import { server } from "../constant";
+import { server, gameData } from "../constant";
 import { io } from "socket.io-client";
 import { Users, BarChart3, ArrowRight, Play, RefreshCcw } from "lucide-react";
 import { Navigate } from "react-router-dom";
@@ -21,12 +21,44 @@ const AdminStats = () => {
 
   const load = async (q) => {
     try {
+      // Get statistics from backend
       const res = await axios.get(`${server}/api/getquestiondetails/${q}`);
       if (res.data?.success) {
-        setData(res.data.question);
-        setTotalParticipants(res.data.totalParticipants || 0);
+        const backendData = res.data.question;
+        const questionIndex = q - 1; // Convert 1-based to 0-based index
+
+        // Use gameData for question text and answer options, backend for statistics
+        if (gameData[questionIndex]) {
+          const question = gameData[questionIndex];
+          setData({
+            questionNumber: q,
+            question: question.question, // Use gameData for question text
+            answers: question.answers.map((answer, index) => ({
+              optionNumber: index + 1,
+              text: answer, // Use gameData for answer text
+              optionCount: backendData.answers?.[index]?.optionCount || 0, // Use backend for counts
+            })),
+          });
+          setTotalParticipants(res.data.totalParticipants || 0);
+        }
       }
-    } catch {}
+    } catch (err) {
+      console.error("Error loading question data:", err);
+      // Fallback to gameData only if backend fails
+      const questionIndex = q - 1;
+      if (gameData[questionIndex]) {
+        const question = gameData[questionIndex];
+        setData({
+          questionNumber: q,
+          question: question.question,
+          answers: question.answers.map((answer, index) => ({
+            optionNumber: index + 1,
+            text: answer,
+            optionCount: 0,
+          })),
+        });
+      }
+    }
   };
 
   const handleAdvanceQuestion = async () => {
@@ -77,6 +109,10 @@ const AdminStats = () => {
       }
     } catch (e) {
       console.error("Failed to reset game", e.message);
+      // Fallback: reset locally
+      setCurrentQuestionIndex(1);
+      setSelected(1);
+      load(1);
     }
   };
 
@@ -128,7 +164,22 @@ const AdminStats = () => {
     s.on("optionIncremented", (payload) => {
       if (!payload) return;
       if (payload.questionNumber === selected && payload.question) {
-        setData(payload.question);
+        const backendData = payload.question;
+        const questionIndex = selected - 1;
+
+        // Merge backend statistics with gameData display
+        if (gameData[questionIndex]) {
+          const question = gameData[questionIndex];
+          setData({
+            questionNumber: selected,
+            question: question.question, // Use gameData for question text
+            answers: question.answers.map((answer, index) => ({
+              optionNumber: index + 1,
+              text: answer, // Use gameData for answer text
+              optionCount: backendData.answers?.[index]?.optionCount || 0, // Use backend for counts
+            })),
+          });
+        }
         if (typeof payload.totalParticipants === "number") {
           setTotalParticipants(payload.totalParticipants);
         }
@@ -142,10 +193,6 @@ const AdminStats = () => {
     return () => s.close();
   }, [selected]);
 
-  const maxOptionCount = useMemo(() => {
-    if (!data || !data.answers?.length) return 0;
-    return Math.max(...data.answers.map((a) => a.optionCount || 0));
-  }, [data]);
   if (!token) {
     return <Navigate to={"/admin"} />;
   }
@@ -233,39 +280,48 @@ const AdminStats = () => {
           <div className="text-center text-blue-200/80">Loading…</div>
         ) : (
           <div className="bg-blue-900/15 rounded-2xl p-6 backdrop-blur-md border border-blue-400/20 shadow-xl">
-            <h2 className="text-xl font-semibold mb-2">
-              Q{data.questionNumber}: {data.question}
-            </h2>
-            <p className="text-sm text-blue-300/80 mb-4">
-              Total participants: {totalParticipants}
-            </p>
+            {/* Question Header */}
+            <div className="text-center mb-6">
+              <h2 className="text-3xl font-bold text-white mb-4">
+                Question {data.questionNumber}
+              </h2>
+              <p className="text-blue-100 text-2xl leading-relaxed">
+                {data.question}
+              </p>
+            </div>
+
+            {/* Stats Info */}
+            <div className="text-center mb-6">
+              <p className="text-sm text-blue-300/80">
+                Total participants: {totalParticipants}
+              </p>
+            </div>
+
+            {/* Stats Display */}
             <div className="space-y-3">
-              {data.answers.map((a) => {
-                const pct = maxOptionCount
-                  ? Math.round(((a.optionCount || 0) / maxOptionCount) * 100)
-                  : 0;
-                return (
-                  <div
-                    key={a.optionNumber}
-                    className="relative bg-blue-950/30 border-2 border-blue-700 rounded-xl p-4 hover:bg-blue-900/30 transition-colors"
-                  >
-                    <div className="flex justify-between items-center text-sm mb-2 pl-6">
-                      <span className="font-medium text-blue-100">
-                        {a.text}
-                      </span>
-                      <span className="font-semibold text-blue-200">
-                        {a.optionCount}
-                      </span>
+              {data.answers
+                .sort((a, b) => (b.optionCount || 0) - (a.optionCount || 0))
+                .slice(0, 4)
+                .map((a) => {
+                  return (
+                    <div
+                      key={a.optionNumber}
+                      className="relative bg-blue-950/30 border-2 border-blue-700 rounded-xl p-4 hover:bg-blue-900/30 transition-colors"
+                    >
+                      <div className="absolute -left-2 -top-2 w-8 h-8 rounded-full bg-blue-600/80 border border-blue-300/40 text-white text-sm font-bold flex items-center justify-center shadow-md">
+                        {a.optionNumber}
+                      </div>
+                      <div className="flex justify-between items-center text-lg pl-6">
+                        <span className="font-medium text-blue-100">
+                          {a.text}
+                        </span>
+                        <span className="font-bold text-blue-200 text-xl">
+                          {a.optionCount}
+                        </span>
+                      </div>
                     </div>
-                    <div className="w-full h-2 bg-blue-900/30 rounded overflow-hidden">
-                      <div
-                        className="h-2 bg-gradient-to-r from-blue-500 via-blue-400 to-purple-400 rounded"
-                        style={{ width: `${pct}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
             </div>
           </div>
         )}

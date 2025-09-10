@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
-import { server } from "../constant";
-import { X, CheckCircle2, Users } from "lucide-react";
+import { server, gameData } from "../constant";
+import { X, CheckCircle2, Users, ArrowRight } from "lucide-react";
 import { io } from "socket.io-client";
 
 const AdminDashboard = () => {
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(1); // questionNumber starts at 1
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0); // 0-based index for gameData array
   const [questionData, setQuestionData] = useState(null);
   const [revealedAnswers, setRevealedAnswers] = useState([]);
   const [showCross, setShowCross] = useState(false);
@@ -21,23 +21,20 @@ const AdminDashboard = () => {
   const [socketInstance, setSocketInstance] = useState(null);
   const [liveUsers, setLiveUsers] = useState(0);
 
-  // 🔹 Fetch question from backend
+  // 🔹 Load question from gameData
   useEffect(() => {
-    if (token) {
-      // Load current game state first
-      axios
-        .get(`${server}/api/state`)
-        .then((res) => {
-          if (res.data?.success) {
-            const s = res.data.state || {};
-            setGameState(s);
-            setCurrentQuestionIndex(s.questionNumber || 1);
-            fetchQuestion(s.questionNumber || currentQuestionIndex);
-          } else {
-            fetchQuestion(currentQuestionIndex);
-          }
-        })
-        .catch(() => fetchQuestion(currentQuestionIndex));
+    if (token && gameData[currentQuestionIndex]) {
+      const question = gameData[currentQuestionIndex];
+      setQuestionData({
+        questionNumber: currentQuestionIndex + 1,
+        question: question.question,
+        answers: question.answers.map((answer, index) => ({
+          optionNumber: index + 1,
+          text: answer,
+          optionCount: 0,
+        })),
+      });
+      setRevealedAnswers([]);
     }
   }, [token, currentQuestionIndex]);
 
@@ -53,16 +50,17 @@ const AdminDashboard = () => {
     s.on("gameState", (st) => {
       if (st) {
         setGameState(st);
-        if (st.questionNumber && st.questionNumber !== currentQuestionIndex) {
-          setCurrentQuestionIndex(st.questionNumber);
-          fetchQuestion(st.questionNumber);
+        if (
+          st.questionNumber &&
+          st.questionNumber !== currentQuestionIndex + 1
+        ) {
+          setCurrentQuestionIndex(st.questionNumber - 1);
         }
       }
     });
     s.on("newQuestion", (payload) => {
       if (payload?.questionNumber) {
-        setCurrentQuestionIndex(payload.questionNumber);
-        fetchQuestion(payload.questionNumber);
+        setCurrentQuestionIndex(payload.questionNumber - 1);
       }
     });
     s.on("optionIncremented", (payload) => {
@@ -93,21 +91,6 @@ const AdminDashboard = () => {
     });
     return () => s.close();
   }, [token]);
-
-  const fetchQuestion = async (qNum) => {
-    try {
-      const res = await axios.get(`${server}/api/getquestiondetails/${qNum}`);
-      if (res.data.success) {
-        setQuestionData(res.data.question);
-        setRevealedAnswers([]);
-        if (typeof res.data.totalParticipants === "number") {
-          setTotalParticipants(res.data.totalParticipants);
-        }
-      }
-    } catch (err) {
-      console.error("Error fetching question:", err.message);
-    }
-  };
 
   // 🔹 Keyboard shortcuts (1-9 = reveal answers, space = ❌ wrong)
   useEffect(() => {
@@ -147,6 +130,15 @@ const AdminDashboard = () => {
     } else {
       setError("Invalid admin password. Please try again.");
       setPassword("");
+    }
+  };
+
+  const handleNextQuestion = () => {
+    if (currentQuestionIndex < gameData.length - 1) {
+      setCurrentQuestionIndex((prev) => prev + 1);
+      setRevealedAnswers([]);
+    } else {
+      setIsGameComplete(true);
     }
   };
 
@@ -206,52 +198,19 @@ const AdminDashboard = () => {
   return (
     <div className="min-h-screen w-full p-6 bg-gradient-to-br from-purple-950 via-blue-950 to-black">
       <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <div className="rounded-2xl border border-blue-400/20 bg-blue-900/10 backdrop-blur-md p-4 md:p-6 shadow-2xl">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              <div>
-                <h1 className="text-3xl font-bold text-white">
-                  Admin Dashboard
-                </h1>
-                <p className="text-blue-300/80 text-sm mt-1">
-                  Control the game, monitor answers, and advance questions in
-                  real time.
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span
-                  className={`px-3 py-1 rounded-full text-xs font-semibold border ${
-                    gameState?.isOpen
-                      ? "bg-green-500/20 border-green-500/30 text-green-300"
-                      : "bg-red-500/20 border-red-500/30 text-red-300"
-                  }`}
-                >
-                  {gameState?.isOpen ? "Game Open" : "Game Closed"}
-                </span>
-                <span className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/10 border border-blue-500/30 text-blue-300">
-                  Q#{currentQuestionIndex}
-                </span>
-                <span
-                  className="px-3 py-1 rounded-full text-xs font-semibold bg-purple-500/10 border border-purple-500/30 text-purple-300 inline-flex items-center gap-1"
-                  title="Live users"
-                >
-                  <Users size={14} /> {liveUsers}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
         {/* Current Question */}
-        <div className="bg-blue-900/15 rounded-2xl p-6 mb-8 backdrop-blur-md border border-blue-400/20 shadow-xl">
-          <h2 className="text-xl font-semibold text-white mb-2">
-            Question {questionData.questionNumber}
-          </h2>
-          <p className="text-blue-100 text-lg mb-6">{questionData.question}</p>
+        <div className="bg-blue-900/15 rounded-2xl p-8 mb-8 backdrop-blur-md border border-blue-400/20 shadow-xl">
+          <div className="text-center mb-8">
+            <h2 className="text-3xl font-bold text-white mb-4">
+              Question {questionData.questionNumber}
+            </h2>
+            <p className="text-blue-100 text-2xl leading-relaxed">
+              {questionData.question}
+            </p>
+          </div>
 
           {/* Answer Options */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {questionData.answers.map((ans) => {
               const isRevealed = revealedAnswers.some(
                 (ra) => ra.optionNumber === ans.optionNumber
@@ -259,22 +218,21 @@ const AdminDashboard = () => {
               return (
                 <div
                   key={ans.optionNumber}
-                  className={`relative p-4 rounded-xl border-2 transition-all overflow-hidden ${
+                  className={`relative p-6 rounded-xl border-2 transition-all overflow-hidden ${
                     isRevealed
                       ? "bg-green-900/30 border-green-500 text-green-100"
                       : "bg-blue-950/30 border-blue-700 text-blue-200 hover:bg-blue-900/30"
                   }`}
                 >
-                  <div className="absolute -left-2 -top-2 w-8 h-8 rounded-full bg-blue-600/80 border border-blue-300/40 text-white text-sm font-bold flex items-center justify-center shadow-md">
+                  <div className="absolute -left-3 -top-3 w-10 h-10 rounded-full bg-blue-600/80 border border-blue-300/40 text-white text-lg font-bold flex items-center justify-center shadow-md">
                     {ans.optionNumber}
                   </div>
-                  <div className="flex justify-between items-center pl-6">
-                    {/* 🔹 Fallback if text is missing */}
-                    <span className="font-semibold">
+                  <div className="flex justify-between items-center pl-8">
+                    <span className="font-semibold text-lg">
                       {ans.text || `Option ${ans.optionNumber}`}
                     </span>
                     {isRevealed && (
-                      <div className="text-green-400 font-bold">
+                      <div className="text-green-400 font-bold text-xl">
                         {ans.optionCount}
                       </div>
                     )}
@@ -282,6 +240,23 @@ const AdminDashboard = () => {
                 </div>
               );
             })}
+          </div>
+
+          {/* Next Question Button */}
+          <div className="mt-8 flex justify-center">
+            <button
+              onClick={handleNextQuestion}
+              disabled={currentQuestionIndex >= gameData.length - 1}
+              className="group relative inline-flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-blue-600/90 to-purple-600/90 hover:from-blue-500/90 hover:to-purple-500/90 disabled:from-gray-600/50 disabled:to-gray-700/50 disabled:cursor-not-allowed rounded-2xl text-white font-bold text-lg shadow-2xl border border-blue-400/30 hover:border-blue-300/50 transition-all duration-300 transform hover:scale-105 disabled:hover:scale-100"
+            >
+              <ArrowRight
+                size={24}
+                className="group-hover:translate-x-1 transition-transform duration-300"
+              />
+              {currentQuestionIndex >= gameData.length - 1
+                ? "Game Complete"
+                : "Next Question"}
+            </button>
           </div>
         </div>
 
@@ -299,8 +274,8 @@ const AdminDashboard = () => {
               <button
                 onClick={() => {
                   setIsGameComplete(false);
-                  setCurrentQuestionIndex(1);
-                  fetchQuestion(1);
+                  setCurrentQuestionIndex(0);
+                  setRevealedAnswers([]);
                 }}
                 className="mt-6 px-6 py-3 bg-gradient-to-r from-blue-600/80 to-blue-900/80 rounded-lg text-lg font-bold shadow-lg transition-opacity border border-blue-400/20 hover:from-blue-500/80 hover:to-blue-800/80 text-white"
               >
