@@ -10,6 +10,7 @@ const AdminDashboard = () => {
   const [revealedAnswers, setRevealedAnswers] = useState([]);
   const [showCross, setShowCross] = useState(false);
   const [isGameComplete, setIsGameComplete] = useState(false);
+  const [topAnswers, setTopAnswers] = useState([]);
   const [gameState, setGameState] = useState({
     isOpen: false,
     questionNumber: 1,
@@ -21,19 +22,71 @@ const AdminDashboard = () => {
   const [socketInstance, setSocketInstance] = useState(null);
   const [liveUsers, setLiveUsers] = useState(0);
 
-  // 🔹 Load question from gameData
-  useEffect(() => {
-    if (token && gameData[currentQuestionIndex]) {
-      const question = gameData[currentQuestionIndex];
-      setQuestionData({
-        questionNumber: currentQuestionIndex + 1,
-        question: question.question,
-        answers: question.answers.map((answer, index) => ({
+  // 🔹 Calculate top 4 answers by count
+  const calculateTopAnswers = (answers) => {
+    return [...answers] // Create a copy to avoid mutating the original array
+      .sort((a, b) => (b.optionCount || 0) - (a.optionCount || 0))
+      .slice(0, 4);
+  };
+
+  // 🔹 Load question from backend and merge with gameData (same as AdminStats)
+  const loadQuestion = async (qIndex) => {
+    try {
+      // Get statistics from backend
+      const res = await axios.get(
+        `${server}/api/getquestiondetails/${qIndex + 1}`
+      );
+      if (res.data?.success) {
+        const backendData = res.data.question;
+        const questionIndex = qIndex; // Convert 1-based to 0-based index
+
+        // Use gameData for question text and answer options, backend for statistics
+        if (gameData[questionIndex]) {
+          const question = gameData[questionIndex];
+          const answers = question.answers.map((answer, index) => {
+            // Find the corresponding backend answer by option number
+            const backendAnswer = backendData.answers?.find(
+              (ba) => ba.optionNumber === index + 1
+            );
+            return {
+              optionNumber: index + 1,
+              text: answer, // Use gameData for answer text
+              optionCount: backendAnswer?.optionCount || 0, // Use backend for counts
+            };
+          });
+
+          setQuestionData({
+            questionNumber: qIndex + 1,
+            question: question.question, // Use gameData for question text
+            answers: answers,
+          });
+          setTopAnswers(calculateTopAnswers(answers));
+          setTotalParticipants(res.data.totalParticipants || 0);
+        }
+      }
+    } catch (err) {
+      console.error("Error loading question data:", err);
+      // Fallback to gameData only if backend fails
+      if (gameData[qIndex]) {
+        const question = gameData[qIndex];
+        const answers = question.answers.map((answer, index) => ({
           optionNumber: index + 1,
           text: answer,
           optionCount: 0,
-        })),
-      });
+        }));
+        setQuestionData({
+          questionNumber: qIndex + 1,
+          question: question.question,
+          answers: answers,
+        });
+        setTopAnswers(calculateTopAnswers(answers));
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (token) {
+      loadQuestion(currentQuestionIndex);
       setRevealedAnswers([]);
     }
   }, [token, currentQuestionIndex]);
@@ -65,8 +118,34 @@ const AdminDashboard = () => {
     });
     s.on("optionIncremented", (payload) => {
       if (!payload) return;
-      if (payload.question) {
-        setQuestionData(payload.question);
+      if (
+        payload.questionNumber === currentQuestionIndex + 1 &&
+        payload.question
+      ) {
+        const backendData = payload.question;
+        const questionIndex = currentQuestionIndex;
+
+        // Merge backend statistics with gameData display
+        if (gameData[questionIndex]) {
+          const question = gameData[questionIndex];
+          const answers = question.answers.map((answer, index) => {
+            // Find the corresponding backend answer by option number
+            const backendAnswer = backendData.answers?.find(
+              (ba) => ba.optionNumber === index + 1
+            );
+            return {
+              optionNumber: index + 1,
+              text: answer, // Use gameData for answer text
+              optionCount: backendAnswer?.optionCount || 0, // Use backend for counts
+            };
+          });
+          setQuestionData({
+            questionNumber: currentQuestionIndex + 1,
+            question: question.question, // Use gameData for question text
+            answers: answers,
+          });
+          setTopAnswers(calculateTopAnswers(answers));
+        }
         if (typeof payload.totalParticipants === "number") {
           setTotalParticipants(payload.totalParticipants);
         }
@@ -92,21 +171,30 @@ const AdminDashboard = () => {
     return () => s.close();
   }, [token]);
 
-  // 🔹 Keyboard shortcuts (1-9 = reveal answers, space = ❌ wrong)
+  // 🔹 Keyboard shortcuts (1-4 = reveal top answers by count order, space = ❌ wrong)
   useEffect(() => {
     const handleKeyPress = (event) => {
-      if (!token || !questionData) return;
+      if (!token || !questionData || !topAnswers.length) return;
 
       const key = event.key;
 
-      if ((key >= "1" && key <= "9") || key === "0") {
-        const index = key === "0" ? 9 : parseInt(key) - 1;
-        const answer = questionData.answers[index];
-        if (
-          answer &&
-          !revealedAnswers.some((ra) => ra.optionNumber === answer.optionNumber)
-        ) {
-          setRevealedAnswers((prev) => [...prev, answer]);
+      // Keys 1-4 reveal top 4 answers by count order (1=highest, 4=4th highest)
+      if (key >= "1" && key <= "4") {
+        const rankIndex = parseInt(key) - 1;
+        const topAnswer = topAnswers[rankIndex];
+        if (topAnswer) {
+          // Find the original answer in questionData
+          const originalAnswer = questionData.answers.find(
+            (a) => a.optionNumber === topAnswer.optionNumber
+          );
+          if (
+            originalAnswer &&
+            !revealedAnswers.some(
+              (ra) => ra.optionNumber === originalAnswer.optionNumber
+            )
+          ) {
+            setRevealedAnswers((prev) => [...prev, originalAnswer]);
+          }
         }
       }
 
@@ -119,7 +207,7 @@ const AdminDashboard = () => {
 
     window.addEventListener("keydown", handleKeyPress);
     return () => window.removeEventListener("keydown", handleKeyPress);
-  }, [token, questionData, revealedAnswers]);
+  }, [token, questionData, revealedAnswers, topAnswers]);
 
   const handleLogin = (e) => {
     e.preventDefault();

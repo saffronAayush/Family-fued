@@ -109,6 +109,7 @@ const FamilyFeudGame = () => {
   };
 
   const handleSelectAnswer = (answerText) => {
+    if (submitted) return; // prevent changing answer after submission
     setSelectedAnswers([answerText]); // only one answer at a time
   };
 
@@ -221,8 +222,13 @@ const FamilyFeudGame = () => {
                 <button
                   key={answer}
                   onClick={() => handleSelectAnswer(answer)}
+                  disabled={submitted}
                   className={`p-4 rounded-lg text-center font-semibold shadow-md backdrop-blur-sm border border-white/10 transition-all ${
-                    isSelected
+                    submitted
+                      ? isSelected
+                        ? "bg-green-500/40 text-green-100 scale-105 cursor-not-allowed"
+                        : "bg-gray-600/20 text-gray-400 cursor-not-allowed opacity-50"
+                      : isSelected
                       ? "bg-blue-500/40 text-blue-100 scale-105"
                       : "bg-blue-950/40 text-blue-200 hover:bg-blue-900/40 hover:scale-105"
                   }`}

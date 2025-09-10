@@ -8,7 +8,7 @@ import { Navigate } from "react-router-dom";
 const AdminStats = () => {
   console.log("in admin stats");
   const [token, setToken] = useState(localStorage.getItem("adminToken"));
-  const [questions, setQuestions] = useState([1, 2, 3]);
+  const [questions, setQuestions] = useState([]);
   const [selected, setSelected] = useState(1);
   const [data, setData] = useState(null);
   const [totalParticipants, setTotalParticipants] = useState(0);
@@ -18,6 +18,15 @@ const AdminStats = () => {
     questionNumber: 1,
   });
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(1);
+
+  // Generate questions array dynamically based on gameData length
+  useEffect(() => {
+    const questionsArray = Array.from(
+      { length: gameData.length },
+      (_, index) => index + 1
+    );
+    setQuestions(questionsArray);
+  }, []);
 
   const load = async (q) => {
     try {
