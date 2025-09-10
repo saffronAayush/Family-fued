@@ -3,18 +3,24 @@ import http from "http";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 import cors from "cors"; 
-import route from "./routes/route.js"
+import route from "./routes/route.js";
 import { initSocket } from "./socket.js";
-import { fun } from "./controlers/controls.js";
+import path from "path";
+import { fileURLToPath } from "url";
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load .env explicitly
+dotenv.config({ path: path.join(__dirname, ".env") });
+console.log("Loaded MONGO_URI:", process.env.MONGO_URI);
 
 const app = express();
 const server = http.createServer(app);
 
-// Middleware to parse JSON
+// Middleware
 app.use(cors({
-  origin: process.env.CLIENT_URL, // your React app URL
+  origin: process.env.CLIENT_URL || "http://localhost:5173",
   methods: ["GET", "POST", "PUT", "DELETE"],
   credentials: true,
 }));
@@ -23,28 +29,32 @@ app.use(express.json());
 // MongoDB connection
 const connectDB = async () => {
   try {
-    await mongoose.connect(process.env.MONGO_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    });
+    await mongoose.connect(process.env.MONGO_URI);
     console.log("✅ MongoDB Connected");
   } catch (err) {
     console.error("❌ Error connecting to MongoDB:", err.message);
-    process.exit(1); // Stop the app if connection fails
+    process.exit(1);
   }
 };
-initSocket(server);
-app.use(route)
-// Example route
-app.get("/", (req, res) => {
-  res.send("Hello, MongoDB is connected 🚀");
-});
 
+// Sockets
+initSocket(server);
+
+// API routes
+app.use("/api", route);
+
+// Serve client build in production
+if (process.env.NODE_ENV === "production") {
+  app.use(express.static(path.join(__dirname, "../client/dist")));
+
+  app.get("*", (req, res) => {
+    res.sendFile(path.join(__dirname, "../client/dist/index.html"));
+  });
+}
 
 // Start server
-const PORT = process.env.PORT || 5000;
-
-app.listen(PORT, async () => {
+const PORT = process.env.PORT || 8000;
+server.listen(PORT, async () => {
   await connectDB();
   console.log(`🚀 Server running on http://localhost:${PORT}`);
 });

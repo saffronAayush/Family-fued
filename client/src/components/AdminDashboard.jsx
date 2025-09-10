@@ -1,119 +1,126 @@
 import React, { useState, useEffect } from "react";
-import { Lock, UnlockKeyhole, ArrowRight, X, CheckCircle2 } from "lucide-react";
-
-// Game data imported from FamilyFeud
-const gameData = [
-  {
-    question: "What's the most common breakup reason in college?",
-    answers: [
-      "Exams 📚",
-      "Long distance 🛣️",
-      "Found someone new 👀",
-      "Family pressure 👵",
-      "Caught by warden 🚨",
-      "Money 💸",
-      "Cheating 💔",
-      "No time ⏰",
-      "Too clingy 😬",
-      "Boring 😴",
-    ],
-  },
-  {
-    question: "What do students actually mean by 'group study'?",
-    answers: [
-      "Netflix 🍿",
-      "Cards 🎲",
-      "Snacks 🍔",
-      "Gossip 🗣️",
-      "Sleep 💤",
-      "Music 🎶",
-      "Movies 🎬",
-      "Romance 😉",
-      "Memes 😂",
-      "Private tuitions 😏",
-    ],
-  },
-  {
-    question: "Name a place on campus where couples are always spotted.",
-    answers: [
-      "Canteen 🍵",
-      "Garden 🌹",
-      "Library 📚",
-      "Rooftop 🌌",
-      "Parking 🛵",
-      "Stairs 🪜",
-      "Empty class 🏫",
-      "Hostel room 🛏️",
-      "Cafe ☕",
-      "Corridor 🚶",
-    ],
-  },
-];
-
-const gameResults = [
-  {
-    question: "What's the most common breakup reason in college?",
-    topAnswers: [
-      { answer: "Cheating 💔", count: 26 },
-      { answer: "Exams 📚", count: 21 },
-      { answer: "Long distance 🛣️", count: 18 },
-      { answer: "Too clingy 😬", count: 14 },
-    ],
-  },
-  {
-    question: "What do students actually mean by 'group study'?",
-    topAnswers: [
-      { answer: "Gossip 🗣️", count: 24 },
-      { answer: "Snacks 🍔", count: 22 },
-      { answer: "Sleep 💤", count: 20 },
-      { answer: "Netflix 🍿", count: 15 },
-    ],
-  },
-  {
-    question: "Name a place on campus where couples are always spotted.",
-    topAnswers: [
-      { answer: "Garden 🌹", count: 28 },
-      { answer: "Canteen 🍵", count: 21 },
-      { answer: "Library 📚", count: 19 },
-      { answer: "Rooftop 🌌", count: 12 },
-    ],
-  },
-];
+import axios from "axios";
+import { server } from "../constant";
+import { ArrowRight, X, CheckCircle2, Users, Play, RefreshCcw } from "lucide-react";
+import { io } from "socket.io-client";
 
 const AdminDashboard = () => {
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(1); // questionNumber starts at 1
+  const [questionData, setQuestionData] = useState(null);
   const [revealedAnswers, setRevealedAnswers] = useState([]);
   const [showCross, setShowCross] = useState(false);
-  const [isLocked, setIsLocked] = useState(false);
   const [isGameComplete, setIsGameComplete] = useState(false);
+  const [gameState, setGameState] = useState({ isOpen: false, questionNumber: 1 });
+  const [totalParticipants, setTotalParticipants] = useState(0);
   const [token, setToken] = useState(localStorage.getItem("adminToken"));
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [socketInstance, setSocketInstance] = useState(null);
+  const [liveUsers, setLiveUsers] = useState(0);
 
-  // Keyboard event listeners
+  // 🔹 Fetch question from backend
+  useEffect(() => {
+    if (token) {
+      // Load current game state first
+      axios.get(`${server}/api/state`).then((res) => {
+        if (res.data?.success) {
+          const s = res.data.state || {};
+          setGameState(s);
+          setCurrentQuestionIndex(s.questionNumber || 1);
+          fetchQuestion(s.questionNumber || currentQuestionIndex);
+        } else {
+          fetchQuestion(currentQuestionIndex);
+        }
+      }).catch(() => fetchQuestion(currentQuestionIndex));
+    }
+  }, [token, currentQuestionIndex]);
+
+  // Subscribe to realtime state
+  useEffect(() => {
+    if (!token) return;
+    const s = io(server, { transports: ["websocket"], withCredentials: true });
+    setSocketInstance(s);
+    // Identify as admin; server excludes admin from live user count
+    s.on("connect", () => {
+      s.emit("register", { role: "admin" });
+    });
+    s.on("gameState", (st) => {
+      if (st) {
+        setGameState(st);
+        if (st.questionNumber && st.questionNumber !== currentQuestionIndex) {
+          setCurrentQuestionIndex(st.questionNumber);
+          fetchQuestion(st.questionNumber);
+        }
+      }
+    });
+    s.on("newQuestion", (payload) => {
+      if (payload?.questionNumber) {
+        setCurrentQuestionIndex(payload.questionNumber);
+        fetchQuestion(payload.questionNumber);
+      }
+    });
+    s.on("optionIncremented", (payload) => {
+      if (!payload) return;
+      if (payload.question) {
+        setQuestionData(payload.question);
+        if (typeof payload.totalParticipants === "number") {
+          setTotalParticipants(payload.totalParticipants);
+        }
+        return;
+      }
+      // Minimal update: increment count locally as fallback
+      const opt = payload.optionNumber;
+      setQuestionData((prev) => {
+        if (!prev) return prev;
+        const next = { ...prev, answers: prev.answers.map((a) => ({ ...a })) };
+        const idx = next.answers.findIndex((a) => a.optionNumber === opt);
+        if (idx >= 0) next.answers[idx].optionCount = (next.answers[idx].optionCount || 0) + 1;
+        return next;
+      });
+    });
+    s.on("liveUsers", (payload) => {
+      if (payload && typeof payload.count === "number") {
+        setLiveUsers(payload.count);
+      }
+    });
+    return () => s.close();
+  }, [token]);
+
+  const fetchQuestion = async (qNum) => {
+    try {
+      const res = await axios.get(`${server}/api/getquestiondetails/${qNum}`);
+      if (res.data.success) {
+        setQuestionData(res.data.question);
+        setRevealedAnswers([]);
+        if (typeof res.data.totalParticipants === "number") {
+          setTotalParticipants(res.data.totalParticipants);
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching question:", err.message);
+    }
+  };
+
+  // 🔹 Keyboard shortcuts (1-9 = reveal answers, space = ❌ wrong)
   useEffect(() => {
     const handleKeyPress = (event) => {
-      if (!token) return;
+      if (!token || !questionData) return;
 
       const key = event.key;
 
-      // Handle number keys 1-4
-      if (key >= "1" && key <= "4") {
-        const answerIndex = parseInt(key) - 1;
-        const currentQuestionData = gameResults[currentQuestionIndex];
-
+      if ((key >= "1" && key <= "9") || key === "0") {
+        const index = key === "0" ? 9 : parseInt(key) - 1;
+        const answer = questionData.answers[index];
         if (
-          currentQuestionData &&
-          currentQuestionData.topAnswers[answerIndex]
+          answer &&
+          !revealedAnswers.some(
+            (ra) => ra.optionNumber === answer.optionNumber
+          )
         ) {
-          const answer = currentQuestionData.topAnswers[answerIndex];
-          if (!revealedAnswers.some((ra) => ra.answer === answer.answer)) {
-            setRevealedAnswers((prev) => [...prev, answer]);
-          }
+          setRevealedAnswers((prev) => [...prev, answer]);
         }
       }
 
-      // Handle spacebar for wrong answer
       if (key === " ") {
         event.preventDefault();
         setShowCross(true);
@@ -123,13 +130,11 @@ const AdminDashboard = () => {
 
     window.addEventListener("keydown", handleKeyPress);
     return () => window.removeEventListener("keydown", handleKeyPress);
-  }, [token, currentQuestionIndex, revealedAnswers]);
+  }, [token, questionData, revealedAnswers]);
 
   const handleLogin = (e) => {
     e.preventDefault();
-
-    // Check if password matches the required admin password
-    if (password === "admin1005") {
+    if (password === "admin108834") {
       localStorage.setItem("adminToken", "true");
       setToken("true");
       setError("");
@@ -139,13 +144,60 @@ const AdminDashboard = () => {
     }
   };
 
-  const handleAdvanceQuestion = () => {
-    if (currentQuestionIndex < gameData.length - 1) {
+  const handleAdvanceQuestion = async () => {
+    try {
+      // Emit to participants
+  await axios.post(`${server}/api/emitNext`, {
+        questionNumber: currentQuestionIndex + 1,
+      });
+
       setCurrentQuestionIndex((prev) => prev + 1);
       setRevealedAnswers([]);
-    } else {
-      // Game is complete after the third question
-      setIsGameComplete(true);
+
+      // If no more questions, mark complete
+      if (currentQuestionIndex >= 5) {
+        setIsGameComplete(true);
+      }
+    } catch (err) {
+      console.error("Error advancing question:", err.message);
+    }
+  };
+
+  const handleStartGame = async () => {
+    try {
+      // Try the start endpoint first
+      try {
+        const res = await axios.post(`${server}/api/start`, {
+          questionNumber: currentQuestionIndex,
+        });
+        if (res.data?.success) {
+          setGameState(res.data.state);
+          return;
+        }
+      } catch (err) {
+        // Fallback: use emitNext (auto-opens game on server and broadcasts)
+        await axios.post(`${server}/api/emitNext`, {
+          questionNumber: currentQuestionIndex,
+        });
+        setGameState({ isOpen: true, questionNumber: currentQuestionIndex });
+      }
+    } catch (e) {
+      console.error("Failed to start game", e.message);
+    }
+  };
+
+  const handleResetGame = async () => {
+    try {
+      const res = await axios.post(`${server}/api/reset`);
+      if (res.data?.success) {
+        setGameState(res.data.state);
+        setCurrentQuestionIndex(1);
+        setRevealedAnswers([]);
+        setIsGameComplete(false);
+        fetchQuestion(1);
+      }
+    } catch (e) {
+      console.error("Failed to reset game", e.message);
     }
   };
 
@@ -154,13 +206,10 @@ const AdminDashboard = () => {
     setToken(null);
     setPassword("");
     setError("");
-    setCurrentQuestionIndex(0);
+    setCurrentQuestionIndex(1);
     setRevealedAnswers([]);
     setIsGameComplete(false);
-  };
-
-  const handleToggleLock = () => {
-    setIsLocked(!isLocked);
+    setQuestionData(null);
   };
 
   if (!token) {
@@ -208,97 +257,105 @@ const AdminDashboard = () => {
     );
   }
 
+  if (!questionData) {
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center bg-black text-white">
+        Loading question...
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen w-full p-6 bg-black">
+    <div className="min-h-screen w-full p-6 bg-gradient-to-br from-purple-950 via-blue-950 to-black">
       <div className="max-w-6xl mx-auto">
-        <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-8 gap-4">
-          <h1 className="text-3xl font-bold text-white">Admin Dashboard</h1>
-          <div className="flex flex-col sm:flex-row gap-4">
-            <button
-              onClick={handleAdvanceQuestion}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600/80 hover:bg-blue-700/80 rounded-lg text-white font-semibold transition-colors"
-            >
-              {currentQuestionIndex === gameData.length - 1 ? (
-                <>
-                  <CheckCircle2 size={20} />
-                  Complete Game
-                </>
-              ) : (
-                <>
-                  <ArrowRight size={20} />
-                  Next Question
-                </>
-              )}
-            </button>
+        {/* Header */}
+        <div className="mb-8">
+          <div className="rounded-2xl border border-blue-400/20 bg-blue-900/10 backdrop-blur-md p-4 md:p-6 shadow-2xl">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div>
+                <h1 className="text-3xl font-bold text-white">Admin Dashboard</h1>
+                <p className="text-blue-300/80 text-sm mt-1">Control the game, monitor answers, and advance questions in real time.</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${gameState?.isOpen ? "bg-green-500/20 border-green-500/30 text-green-300" : "bg-red-500/20 border-red-500/30 text-red-300"}`}>
+                  {gameState?.isOpen ? "Game Open" : "Game Closed"}
+                </span>
+                <span className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/10 border border-blue-500/30 text-blue-300">
+                  Q#{currentQuestionIndex}
+                </span>
+                <span className="px-3 py-1 rounded-full text-xs font-semibold bg-purple-500/10 border border-purple-500/30 text-purple-300 inline-flex items-center gap-1" title="Live users">
+                  <Users size={14} /> {liveUsers}
+                </span>
+              </div>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button
+                onClick={handleStartGame}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-green-600/80 hover:bg-green-700/80 rounded-lg text-white font-semibold border border-green-400/20"
+              >
+                <Play size={16} /> Open/Sync Game
+              </button>
+              <button
+                onClick={handleResetGame}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-yellow-600/80 hover:bg-yellow-700/80 rounded-lg text-white font-semibold border border-yellow-400/20"
+              >
+                <RefreshCcw size={16} /> Reset
+              </button>
+              <button
+                onClick={handleAdvanceQuestion}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600/80 hover:bg-blue-700/80 rounded-lg text-white font-semibold border border-blue-400/20"
+              >
+                <ArrowRight size={18} /> Next Question
+              </button>
+              <div className="ml-auto"></div>
+              <button
+                onClick={handleLogout}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-red-600/80 hover:bg-red-700/80 rounded-lg text-white font-semibold border border-red-400/20"
+              >
+                Logout
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Current Question */}
-        <div className="bg-blue-900/20 rounded-xl p-6 mb-8 backdrop-blur-sm">
-          <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-4 gap-2">
-            <h2 className="text-xl font-semibold text-white">
-              Question {currentQuestionIndex + 1} of {gameData.length}
-            </h2>
-          </div>
-          <p className="text-blue-100 text-lg mb-6">
-            {gameData[currentQuestionIndex]?.question}
-          </p>
+        
+
+  {/* Current Question */}
+  <div className="bg-blue-900/15 rounded-2xl p-6 mb-8 backdrop-blur-md border border-blue-400/20 shadow-xl">
+          <h2 className="text-xl font-semibold text-white mb-2">
+            Question {questionData.questionNumber}
+          </h2>
+          <p className="text-blue-100 text-lg mb-6">{questionData.question}</p>
 
           {/* Answer Options */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {gameData[currentQuestionIndex]?.answers.map((answer, index) => {
-              const revealedAnswer = revealedAnswers.find(
-                (ra) => ra.answer === answer
+            {questionData.answers.map((ans) => {
+              const isRevealed = revealedAnswers.some(
+                (ra) => ra.optionNumber === ans.optionNumber
               );
-              const isRevealed = !!revealedAnswer;
-
               return (
                 <div
-                  key={answer}
-                  className={`p-4 rounded-lg border-2 transition-all ${
+                  key={ans.optionNumber}
+                  className={`relative p-4 rounded-xl border-2 transition-all overflow-hidden ${
                     isRevealed
                       ? "bg-green-900/30 border-green-500 text-green-100"
-                      : "bg-blue-950/30 border-blue-700 text-blue-200"
+                      : "bg-blue-950/30 border-blue-700 text-blue-200 hover:bg-blue-900/30"
                   }`}
                 >
-                  <div className="flex justify-between items-center">
-                    <span className="font-semibold">{answer}</span>
+                  <div className="absolute -left-2 -top-2 w-8 h-8 rounded-full bg-blue-600/80 border border-blue-300/40 text-white text-sm font-bold flex items-center justify-center shadow-md">
+                    {ans.optionNumber}
+                  </div>
+                  <div className="flex justify-between items-center pl-6">
+                    {/* 🔹 Fallback if text is missing */}
+                    <span className="font-semibold">
+                      {ans.text || `Option ${ans.optionNumber}`}
+                    </span>
                     {isRevealed && (
                       <div className="text-green-400 font-bold">
-                        {revealedAnswer.count}/28
+                        {ans.optionCount}
                       </div>
                     )}
                   </div>
-                  {isRevealed && (
-                    <div className="text-green-300 text-sm mt-1">
-                      {(() => {
-                        // Find the actual position in the gameResults topAnswers array
-                        const currentQuestionData =
-                          gameResults[currentQuestionIndex];
-                        const actualRank =
-                          currentQuestionData.topAnswers.findIndex(
-                            (ra) => ra.answer === revealedAnswer.answer
-                          ) + 1;
-                        const suffixes = ["st", "nd", "rd", "th"];
-                        const suffix =
-                          actualRank <= 3 ? suffixes[actualRank - 1] : "th";
-
-                        // Points based on ranking
-                        const points = [500, 300, 150, 50][actualRank - 1] || 0;
-
-                        return (
-                          <div>
-                            <div>
-                              {actualRank}${suffix} Place
-                            </div>
-                            <div className="text-yellow-400 font-bold">
-                              {points} points
-                            </div>
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  )}
                 </div>
               );
             })}
@@ -309,26 +366,18 @@ const AdminDashboard = () => {
         {isGameComplete && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <div className="bg-blue-900/20 backdrop-blur-md rounded-2xl shadow-2xl p-8 border border-blue-400/20 bg-opacity-30 max-w-md w-full text-center">
-              <div className="mb-6">
-                <CheckCircle2 className="mx-auto text-green-400" size={80} />
-              </div>
+              <CheckCircle2 className="mx-auto text-green-400 mb-4" size={80} />
               <h2 className="text-3xl font-bold text-white mb-4">
                 Game Complete!
               </h2>
               <p className="text-blue-200/90 mb-6">
-                All questions have been completed. The Family Feud game is now
-                finished.
+                All questions have been completed. 🎉
               </p>
-              <div className="space-y-2 text-blue-300">
-                <p>🎉 Thank you for hosting the game!</p>
-                <p>📊 All answers have been revealed</p>
-                <p>🏆 Game session completed successfully</p>
-              </div>
               <button
                 onClick={() => {
                   setIsGameComplete(false);
-                  setCurrentQuestionIndex(0);
-                  setRevealedAnswers([]);
+                  setCurrentQuestionIndex(1);
+                  fetchQuestion(1);
                 }}
                 className="mt-6 px-6 py-3 bg-gradient-to-r from-blue-600/80 to-blue-900/80 rounded-lg text-lg font-bold shadow-lg transition-opacity border border-blue-400/20 hover:from-blue-500/80 hover:to-blue-800/80 text-white"
               >
@@ -338,7 +387,7 @@ const AdminDashboard = () => {
           </div>
         )}
 
-        {/* Cross Animation Overlay */}
+        {/* Wrong Answer ❌ overlay */}
         {showCross && (
           <div className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none">
             <X className="text-red-500" size={200} strokeWidth={4} />
