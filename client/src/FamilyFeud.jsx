@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { User, Send, CheckCircle2, ArrowRight } from "lucide-react";
+import { server } from "./constant";
+import { io } from "socket.io-client";
+import { User, CheckCircle2, ArrowRight } from "lucide-react";
 
 // --- Game Data ---
 const gameData = [
@@ -50,45 +52,85 @@ const gameData = [
   },
 ];
 
-const gameResults = [
-  {
-    question: "What's the most common breakup reason in college?",
-    topAnswers: [
-      { answer: "Cheating 💔", count: 26 },
-      { answer: "Exams 📚", count: 21 },
-      { answer: "Long distance 🛣️", count: 18 },
-      { answer: "Too clingy 😬", count: 14 },
-    ], // total = 79 (others got 9)
-  },
-  {
-    question: "What do students actually mean by 'group study'?",
-    topAnswers: [
-      { answer: "Gossip 🗣️", count: 24 },
-      { answer: "Snacks 🍔", count: 22 },
-      { answer: "Sleep 💤", count: 20 },
-      { answer: "Netflix 🍿", count: 15 },
-    ], // total = 81 (others got 7)
-  },
-  {
-    question: "Name a place on campus where couples are always spotted.",
-    topAnswers: [
-      { answer: "Garden 🌹", count: 28 },
-      { answer: "Canteen 🍵", count: 21 },
-      { answer: "Library 📚", count: 19 },
-      { answer: "Rooftop 🌌", count: 12 },
-    ], // total = 80 (others got 8)
-  },
-];
-
 const FamilyFeudGame = () => {
-  const [step, setStep] = useState("username"); // 'username', 'playing', 'submitted', 'thankyou'
+  const [step, setStep] = useState("username"); // 'username', 'playing', 'thankyou'
   const [username, setUsername] = useState("");
   const [selectedAnswers, setSelectedAnswers] = useState([]);
   const [currentQuestion, setCurrentQuestion] = useState(0);
-  const [allAnswers, setAllAnswers] = useState([]);
   const [isCompleted, setIsCompleted] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
 
-  // Check localStorage on component mount
+  // Connect to socket and subscribe to game state
+  useEffect(() => {
+    const socket = io(server, { transports: ["websocket"], withCredentials: true });
+
+    socket.on("connect", () => {
+      // Identify as a participant so server can track live users
+      socket.emit("register", { role: "participant" });
+      // console.log("connected", socket.id);
+    });
+
+    socket.on("gameState", (state) => {
+      if (state) {
+        setIsOpen(!!state.isOpen);
+        const q = Number(state.questionNumber || 1);
+        setCurrentQuestion(Math.max(0, q - 1));
+        // If admin reset/closed game, allow users to play again
+        if (!state.isOpen) {
+          localStorage.removeItem("familyFeudCompleted");
+          // Keep username so they don't have to retype if they stay on page
+          setIsCompleted(false);
+          setSelectedAnswers([]);
+          setSubmitted(false);
+          setStep("username");
+        }
+      }
+    });
+
+    socket.on("newQuestion", (payload) => {
+      if (payload?.questionNumber) {
+  setIsOpen(true);
+        const qNum = Number(payload.questionNumber);
+        // If admin moved beyond last question -> complete
+        if (qNum > gameData.length) {
+          localStorage.setItem("familyFeudCompleted", "true");
+          if (username) {
+            localStorage.setItem("familyFeudUsername", username);
+          }
+          setIsCompleted(true);
+          setStep("thankyou");
+          return;
+        }
+        setCurrentQuestion(Math.max(0, qNum - 1));
+        setSelectedAnswers([]);
+        setSubmitted(false);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+    });
+
+    // On mount fetch current state once as well
+    fetch(`${server}/api/state`).then((r) => r.json()).then((d) => {
+      if (d?.success && d.state) {
+        setIsOpen(!!d.state.isOpen);
+        setCurrentQuestion(Math.max(0, Number(d.state.questionNumber || 1) - 1));
+        if (!d.state.isOpen) {
+          localStorage.removeItem("familyFeudCompleted");
+          setIsCompleted(false);
+          setSelectedAnswers([]);
+          setSubmitted(false);
+          setStep("username");
+        }
+      }
+    }).catch(() => {
+      // If state endpoint not available, wait for socket event instead
+      setTimeout(() => {}, 0);
+    });
+
+  return () => socket.close();
+  }, []);
+
+  // Check localStorage on mount (if already completed)
   useEffect(() => {
     const gameCompleted = localStorage.getItem("familyFeudCompleted");
     if (gameCompleted === "true") {
@@ -99,53 +141,41 @@ const FamilyFeudGame = () => {
 
   const handleStartGame = (e) => {
     e.preventDefault();
-    if (username.trim()) {
-      setStep("playing");
-      // Scroll to top when starting the game
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }
+  if (!username.trim()) return;
+  if (!isOpen) return; // prevent starting before admin opens
+  setStep("playing");
+  window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handleSelectAnswer = (answerText) => {
-    setSelectedAnswers([answerText]); // Only store the most recent selection
+    setSelectedAnswers([answerText]); // only one answer at a time
   };
 
   const handleSubmitAnswers = () => {
     if (selectedAnswers.length === 1) {
-      // Store the answer for current question
-      const newAnswer = {
-        questionIndex: currentQuestion,
-        question: gameData[currentQuestion].question,
-        answer: selectedAnswers[0],
-      };
+      if (submitted) return; // prevent duplicate posts
+      const selectedAnswer = selectedAnswers[0];
+      const questionNumber = currentQuestion + 1; // backend expects 1-based index
+      const optionNumber =
+        gameData[currentQuestion].answers.indexOf(selectedAnswer) + 1;
 
-      const updatedAnswers = [...allAnswers, newAnswer];
-      setAllAnswers(updatedAnswers);
-
-      console.log({
-        user: username,
-        selection: selectedAnswers[0],
-        question: currentQuestion + 1,
-      });
-
-      // Check if this was the last question
-      if (currentQuestion === gameData.length - 1) {
-        // Game completed
-        localStorage.setItem("familyFeudCompleted", "true");
-        localStorage.setItem(
-          "familyFeudAnswers",
-          JSON.stringify(updatedAnswers)
-        );
-        localStorage.setItem("familyFeudUsername", username);
-        setIsCompleted(true);
-        setStep("thankyou");
-      } else {
-        // Move to next question
-        setCurrentQuestion(currentQuestion + 1);
-        setSelectedAnswers([]);
-        // Scroll to top when moving to next question
-        window.scrollTo({ top: 0, behavior: "smooth" });
-      }
+      // Send result to backend
+  fetch(`${server}/api/submit`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          questionNumber,
+          optionNumber,
+        }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          console.log("✅ Answer saved to server:", data);
+          setSubmitted(true);
+        })
+        .catch((err) => console.error("❌ Error saving result:", err));
     }
   };
 
@@ -153,17 +183,18 @@ const FamilyFeudGame = () => {
 
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-center p-2 md:p-4 font-sans text-white">
-      {step === "username" && (
+      {/* --- Username Input Screen --- */}
+  {step === "username" && (
         <form
           onSubmit={handleStartGame}
-          className="w-full max-w-md mx-auto bg-blue-950/20 backdrop-blur-md rounded-2xl shadow-2xl p-4 md:p-8 border border-blue-400/20 bg-opacity-30"
+          className="w-full max-w-md mx-auto bg-blue-950/20 backdrop-blur-md rounded-2xl shadow-2xl p-4 md:p-8 border border-blue-400/20"
         >
           <div className="flex flex-col items-center justify-center mb-8">
             <h1 className="text-center text-3xl md:text-5xl font-bold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">
-              IOTA
+              IOTA FEUD
             </h1>
             <p className="text-center text-white/80">
-              Enter your name to start.
+              Enter your name to join. {isOpen ? "" : "(Waiting for admin to start)"}
             </p>
           </div>
           <div className="relative">
@@ -176,21 +207,22 @@ const FamilyFeudGame = () => {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               placeholder="Your Name"
-              className="w-full p-3 pl-10 bg-blue-950/20 border-2 border-transparent focus:border-blue-400/50 focus:outline-none rounded-lg placeholder:text-blue-200/50 text-lg transition-colors text-blue-100"
+              className="w-full p-3 pl-10 bg-blue-950/20 border-2 border-transparent focus:border-blue-400/50 focus:outline-none rounded-lg placeholder:text-blue-200/50 text-lg text-blue-100"
             />
           </div>
           <button
             type="submit"
-            disabled={!username.trim()}
-            className="w-full mt-8 py-3 bg-gradient-to-r from-blue-600/80 to-blue-900/80 rounded-lg text-lg font-bold shadow-lg transition-opacity disabled:opacity-50 disabled:cursor-not-allowed border border-blue-400/20 hover:from-blue-500/80 hover:to-blue-800/80"
+            disabled={!username.trim() || !isOpen}
+            className="w-full mt-8 py-3 bg-gradient-to-r from-blue-600/80 to-blue-900/80 rounded-lg text-lg font-bold shadow-lg transition disabled:opacity-50 disabled:cursor-not-allowed border border-blue-400/20 hover:from-blue-500/80 hover:to-blue-800/80"
           >
-            Start Game
+            {isOpen ? "Start Game" : "Waiting for Admin"}
           </button>
         </form>
       )}
 
+      {/* --- Game Playing Screen --- */}
       {step === "playing" && (
-        <div className="w-full max-w-md mx-auto bg-blue-950/20 backdrop-blur-md rounded-2xl shadow-2xl p-4 md:p-8 border border-blue-400/20 bg-opacity-30">
+        <div className="w-full max-w-md mx-auto bg-blue-950/20 backdrop-blur-md rounded-2xl shadow-2xl p-4 md:p-8 border border-blue-400/20">
           <p className="text-center text-blue-200/90 text-sm">
             Hi, {username}!
           </p>
@@ -212,13 +244,14 @@ const FamilyFeudGame = () => {
             {gameData[currentQuestion]?.question}
           </h2>
 
-          {/* Progress Bar */}
+          {/* Selected Answer */}
           {selectedAnswers.length > 0 && (
             <p className="text-center text-sm font-semibold text-blue-300 mb-6">
               Your answer: {selectedAnswers[0]}
             </p>
           )}
 
+          {/* Answer Buttons */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {gameData[currentQuestion]?.answers.map((answer) => {
               const isSelected = selectedAnswers.includes(answer);
@@ -240,24 +273,23 @@ const FamilyFeudGame = () => {
 
           <button
             onClick={handleSubmitAnswers}
-            disabled={!hasSelection}
-            className="w-full mt-8 py-3 flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600/60 to-blue-900/60 backdrop-blur-sm rounded-lg text-lg font-bold shadow-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed border border-blue-400/20 hover:from-blue-500/60 hover:to-blue-800/60 text-blue-100"
+            disabled={!hasSelection || submitted}
+            className="w-full mt-8 py-3 flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600/60 to-blue-900/60 backdrop-blur-sm rounded-lg text-lg font-bold shadow-lg transition disabled:opacity-30 disabled:cursor-not-allowed border border-blue-400/20 hover:from-blue-500/60 hover:to-blue-800/60 text-blue-100"
           >
-            {currentQuestion === gameData.length - 1 ? (
-              <>
-                <CheckCircle2 size={20} /> Complete Game
-              </>
+            {submitted ? (
+              <>Submitted ✓ (waiting for next question)</>
             ) : (
               <>
-                <ArrowRight size={20} /> Next Question
+                <CheckCircle2 size={20} /> Submit Answer
               </>
             )}
           </button>
         </div>
       )}
 
+      {/* --- Thank You Screen --- */}
       {step === "thankyou" && (
-        <div className="text-center w-full max-w-md mx-auto bg-blue-950/20 backdrop-blur-md rounded-2xl shadow-2xl p-4 md:p-8 border border-blue-400/20 bg-opacity-30">
+        <div className="text-center w-full max-w-md mx-auto bg-blue-950/20 backdrop-blur-md rounded-2xl shadow-2xl p-4 md:p-8 border border-blue-400/20">
           <div className="mb-6">
             <CheckCircle2 className="mx-auto text-green-400" size={80} />
           </div>

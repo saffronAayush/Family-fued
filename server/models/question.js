@@ -1,14 +1,16 @@
 import mongoose from "mongoose";
 
+const answerSchema = new mongoose.Schema({
+  optionNumber: { type: Number, required: true },
+  text: { type: String, required: true },  // ✅ Make sure text is defined
+  optionCount: { type: Number, default: 0 },
+});
+
 const questionSchema = new mongoose.Schema(
   {
-    questionNumber: { type: Number, required: true, unique: true }, 
-    answers: [
-      {
-        optionNumber: { type: Number },
-        optionCount: { type: Number },
-      },
-    ],
+    questionNumber: { type: Number, required: true, unique: true },
+    question: { type: String, required: true },
+    answers: [answerSchema],
   },
   { timestamps: true }
 );
