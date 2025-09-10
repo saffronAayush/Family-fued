@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 const answerSchema = new mongoose.Schema({
   optionNumber: { type: Number, required: true },
-  text: { type: String, required: true },  // ✅ Make sure text is defined
+  text: { type: String }, // ✅ Make sure text is defined
   optionCount: { type: Number, default: 0 },
 });
 

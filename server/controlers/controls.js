@@ -12,7 +12,9 @@ let gameState = {
 const login = async (req, res) => {
   const { name } = req.body;
   if (!name || name.trim() === "") {
-    return res.status(400).json({ success: false, message: "Name is required" });
+    return res
+      .status(400)
+      .json({ success: false, message: "Name is required" });
   }
   try {
     const participant = new Participant({ name });
@@ -28,13 +30,19 @@ const login = async (req, res) => {
 const adminLogin = async (req, res) => {
   const { password } = req.body;
   if (!password || password.trim() === "") {
-    return res.status(400).json({ success: false, message: "Password is required" });
+    return res
+      .status(400)
+      .json({ success: false, message: "Password is required" });
   }
   try {
     if (password === "admin108834") {
-  return res.status(200).json({ success: true, message: "Admin login successful" });
+      return res
+        .status(200)
+        .json({ success: true, message: "Admin login successful" });
     } else {
-      return res.status(401).json({ success: false, message: "Invalid password" });
+      return res
+        .status(401)
+        .json({ success: false, message: "Invalid password" });
     }
   } catch (err) {
     console.error("Error in admin login:", err.message);
@@ -46,12 +54,16 @@ const adminLogin = async (req, res) => {
 const getQuestionOptions = async (req, res) => {
   const { id } = req.params;
   if (isNaN(id)) {
-    return res.status(400).json({ success: false, message: "Invalid question number" });
+    return res
+      .status(400)
+      .json({ success: false, message: "Invalid question number" });
   }
   try {
     const question = await Question.findOne({ questionNumber: parseInt(id) });
     if (!question) {
-      return res.status(404).json({ success: false, message: "Question not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Question not found" });
     }
     const totalParticipants = await Participant.countDocuments();
     return res.status(200).json({ success: true, question, totalParticipants });
@@ -78,7 +90,9 @@ const incrementOptionCount = async (req, res) => {
       { new: true }
     ).select("questionNumber question answers");
     if (!updatedQuestion) {
-      return res.status(404).json({ success: false, message: "Question or option not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Question or option not found" });
     }
     // Emit live update to all clients (especially admin)
     const totalParticipants = await Participant.countDocuments();
@@ -88,7 +102,11 @@ const incrementOptionCount = async (req, res) => {
       question: updatedQuestion,
       totalParticipants,
     });
-    return res.status(200).json({ success: true, message: "Option count incremented", question: updatedQuestion });
+    return res.status(200).json({
+      success: true,
+      message: "Option count incremented",
+      question: updatedQuestion,
+    });
   } catch (err) {
     console.error("Error updating option count:", err.message);
     return res.status(500).json({ success: false, error: "Server error" });
@@ -99,7 +117,9 @@ const incrementOptionCount = async (req, res) => {
 const emitQuestion = async (req, res) => {
   const { questionNumber } = req.body;
   if (!questionNumber) {
-    return res.status(400).json({ success: false, message: "questionNumber is required" });
+    return res
+      .status(400)
+      .json({ success: false, message: "questionNumber is required" });
   }
   try {
     // Update in-memory state and broadcast
@@ -109,7 +129,11 @@ const emitQuestion = async (req, res) => {
     gameState.questionNumber = Number(questionNumber);
     getIo().emit("newQuestion", { questionNumber: gameState.questionNumber });
     getIo().emit("gameState", { ...gameState });
-    return res.status(200).json({ success: true, message: "Question number emitted successfully", questionNumber: gameState.questionNumber });
+    return res.status(200).json({
+      success: true,
+      message: "Question number emitted successfully",
+      questionNumber: gameState.questionNumber,
+    });
   } catch (err) {
     console.error("Error emitting question:", err.message);
     return res.status(500).json({ success: false, error: "Server error" });
@@ -151,8 +175,44 @@ const resetGame = async (req, res) => {
   }
 };
 
-export { getGameState, startGame, resetGame };
+const fun = async () => {
+  try {
+    // 🧹 Clear old records
+    await Question.deleteMany({});
+    console.log("🧹 Existing questions removed");
 
+    // Create 5 questions
+    const questions = [];
+    for (let q = 1; q <= 5; q++) {
+      const answers = [];
+      for (let i = 1; i <= 10; i++) {
+        answers.push({
+          optionNumber: i,
+          text: "", // keep empty for now
+          optionCount: 0,
+        });
+      }
+      questions.push({
+        questionNumber: q,
+        question: `Question ${q}`, // placeholder text
+        answers,
+      });
+    }
+
+    // ✅ Insert into DB
+    await Question.insertMany(questions);
+    console.log("🎉 5 questions inserted successfully!");
+
+    // 📝 Verify
+    const qList = await Question.find({});
+    qList.forEach((q) => console.log(q));
+
+    process.exit(0);
+  } catch (err) {
+    console.error("❌ Error seeding questions:", err);
+    process.exit(1);
+  } // Exit after seeding
+};
 // Seeder to reset DB with text answers
 /*const fun = async () => {
   await Question.deleteMany({});
@@ -215,4 +275,14 @@ export { getGameState, startGame, resetGame };
   process.exit();
 };
 */
-export { login, adminLogin, getQuestionOptions, incrementOptionCount, emitQuestion};
+export {
+  getGameState,
+  startGame,
+  resetGame,
+  login,
+  adminLogin,
+  getQuestionOptions,
+  fun,
+  incrementOptionCount,
+  emitQuestion,
+};

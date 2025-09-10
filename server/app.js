@@ -7,6 +7,7 @@ import route from "./routes/route.js";
 import { initSocket } from "./socket.js";
 import path from "path";
 import { fileURLToPath } from "url";
+import { fun } from "./controlers/controls.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -38,10 +39,8 @@ const connectDB = async () => {
     process.exit(1);
   }
 };
-
 // Sockets
 initSocket(server);
-
 // API routes
 app.use("/api", route);
 
