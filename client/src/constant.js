@@ -1,6 +1,7 @@
 // Server configuration
 // Prefer env var; fall back to localhost:8000 to match backend default
-export const server = import.meta.env.VITE_SERVER || "http://localhost:3000";
+export const server =
+  import.meta.env.VITE_SERVER || "https://family-fued.onrender.com";
 
 export const gameData = [
   {
