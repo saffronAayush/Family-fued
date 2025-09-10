@@ -2,7 +2,7 @@ import express from "express";
 import http from "http";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
-import cors from "cors"; 
+import cors from "cors";
 import route from "./routes/route.js";
 import { initSocket } from "./socket.js";
 import path from "path";
@@ -19,11 +19,13 @@ const app = express();
 const server = http.createServer(app);
 
 // Middleware
-app.use(cors({
-  origin: process.env.CLIENT_URL || "http://localhost:5173",
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  credentials: true,
-}));
+app.use(
+  cors({
+    origin: process.env.CLIENT_URL || "http://localhost:5173",
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    credentials: true,
+  })
+);
 app.use(express.json());
 
 // MongoDB connection
@@ -42,15 +44,6 @@ initSocket(server);
 
 // API routes
 app.use("/api", route);
-
-// Serve client build in production
-if (process.env.NODE_ENV === "production") {
-  app.use(express.static(path.join(__dirname, "../client/dist")));
-
-  app.get("*", (req, res) => {
-    res.sendFile(path.join(__dirname, "../client/dist/index.html"));
-  });
-}
 
 // Start server
 const PORT = process.env.PORT || 8000;
