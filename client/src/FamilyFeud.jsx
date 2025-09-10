@@ -13,6 +13,7 @@ const FamilyFeudGame = () => {
   const [isCompleted, setIsCompleted] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Connect to socket and subscribe to game state
   useEffect(() => {
@@ -39,6 +40,7 @@ const FamilyFeudGame = () => {
           setIsCompleted(false);
           setSelectedAnswers([]);
           setSubmitted(false);
+          setIsSubmitting(false);
           setStep("username");
         }
       }
@@ -48,6 +50,7 @@ const FamilyFeudGame = () => {
       if (payload?.questionNumber) {
         setIsOpen(true);
         const qNum = Number(payload.questionNumber);
+
         // If admin moved beyond last question -> complete
         if (qNum > gameData.length) {
           localStorage.setItem("familyFeudCompleted", "true");
@@ -61,6 +64,7 @@ const FamilyFeudGame = () => {
         setCurrentQuestion(Math.max(0, qNum - 1));
         setSelectedAnswers([]);
         setSubmitted(false);
+        setIsSubmitting(false);
         window.scrollTo({ top: 0, behavior: "smooth" });
       }
     });
@@ -79,6 +83,7 @@ const FamilyFeudGame = () => {
             setIsCompleted(false);
             setSelectedAnswers([]);
             setSubmitted(false);
+            setIsSubmitting(false);
             setStep("username");
           }
         }
@@ -115,7 +120,9 @@ const FamilyFeudGame = () => {
 
   const handleSubmitAnswers = () => {
     if (selectedAnswers.length === 1) {
-      if (submitted) return; // prevent duplicate posts
+      if (submitted || isSubmitting) return; // prevent duplicate posts
+
+      setIsSubmitting(true);
       const selectedAnswer = selectedAnswers[0];
       const questionNumber = currentQuestion + 1; // backend expects 1-based index
       const optionNumber =
@@ -137,7 +144,15 @@ const FamilyFeudGame = () => {
           console.log("✅ Answer saved to server:", data);
           setSubmitted(true);
         })
-        .catch((err) => console.error("❌ Error saving result:", err));
+        .catch((err) => {
+          console.error("❌ Error saving result:", err);
+          // Reset submitting state on error so user can try again
+          setIsSubmitting(false);
+        })
+        .finally(() => {
+          // Always reset submitting state after completion
+          setIsSubmitting(false);
+        });
     }
   };
 
@@ -241,10 +256,21 @@ const FamilyFeudGame = () => {
 
           <button
             onClick={handleSubmitAnswers}
-            disabled={!hasSelection || submitted}
-            className="w-full mt-8 py-3 flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600/60 to-blue-900/60 backdrop-blur-sm rounded-lg text-lg font-bold shadow-lg transition disabled:opacity-30 disabled:cursor-not-allowed border border-blue-400/20 hover:from-blue-500/60 hover:to-blue-800/60 text-blue-100"
+            disabled={!hasSelection || submitted || isSubmitting}
+            className={`w-full mt-8 py-3 flex items-center justify-center gap-2 backdrop-blur-sm rounded-lg text-lg font-bold shadow-lg transition border border-blue-400/20 text-blue-100 ${
+              isSubmitting
+                ? "bg-gray-600/60 cursor-not-allowed opacity-70"
+                : submitted
+                ? "bg-green-600/60 cursor-not-allowed opacity-70"
+                : "bg-gradient-to-r from-blue-600/60 to-blue-900/60 hover:from-blue-500/60 hover:to-blue-800/60 disabled:opacity-30 disabled:cursor-not-allowed"
+            }`}
           >
-            {submitted ? (
+            {isSubmitting ? (
+              <>
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                Submitting...
+              </>
+            ) : submitted ? (
               <>Submitted ✓ (waiting for next question)</>
             ) : (
               <>

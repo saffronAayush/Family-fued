@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import axios from "axios";
 import { server, gameData } from "../constant";
 import { io } from "socket.io-client";
@@ -17,7 +17,8 @@ const AdminStats = () => {
     isOpen: false,
     questionNumber: 1,
   });
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(1);
+  const currentQuestionIndex = useRef(1);
+  const [isAdvancingQuestion, setIsAdvancingQuestion] = useState(false);
 
   // Generate questions array dynamically based on gameData length
   useEffect(() => {
@@ -71,16 +72,22 @@ const AdminStats = () => {
   };
 
   const handleAdvanceQuestion = async () => {
+    if (isAdvancingQuestion) return; // Prevent multiple clicks
+
     try {
+      setIsAdvancingQuestion(true);
+
       // Emit to participants
       await axios.post(`${server}/api/emitNext`, {
-        questionNumber: currentQuestionIndex + 1,
+        questionNumber: currentQuestionIndex.current + 1,
       });
 
-      setCurrentQuestionIndex((prev) => prev + 1);
-      setSelected(currentQuestionIndex + 1);
+      currentQuestionIndex.current += 1;
+      setSelected(currentQuestionIndex.current);
     } catch (err) {
       console.error("Error advancing question:", err.message);
+    } finally {
+      setIsAdvancingQuestion(false);
     }
   };
 
@@ -89,7 +96,7 @@ const AdminStats = () => {
       // Try the start endpoint first
       try {
         const res = await axios.post(`${server}/api/start`, {
-          questionNumber: currentQuestionIndex,
+          questionNumber: currentQuestionIndex.current,
         });
         if (res.data?.success) {
           setGameState(res.data.state);
@@ -98,9 +105,12 @@ const AdminStats = () => {
       } catch (err) {
         // Fallback: use emitNext (auto-opens game on server and broadcasts)
         await axios.post(`${server}/api/emitNext`, {
-          questionNumber: currentQuestionIndex,
+          questionNumber: currentQuestionIndex.current,
         });
-        setGameState({ isOpen: true, questionNumber: currentQuestionIndex });
+        setGameState({
+          isOpen: true,
+          questionNumber: currentQuestionIndex.current,
+        });
       }
     } catch (e) {
       console.error("Failed to start game", e.message);
@@ -112,14 +122,14 @@ const AdminStats = () => {
       const res = await axios.post(`${server}/api/reset`);
       if (res.data?.success) {
         setGameState(res.data.state);
-        setCurrentQuestionIndex(1);
+        currentQuestionIndex.current = 1;
         setSelected(1);
         load(1);
       }
     } catch (e) {
       console.error("Failed to reset game", e.message);
       // Fallback: reset locally
-      setCurrentQuestionIndex(1);
+      currentQuestionIndex.current = 1;
       setSelected(1);
       load(1);
     }
@@ -143,7 +153,7 @@ const AdminStats = () => {
           if (res.data?.success) {
             const s = res.data.state || {};
             setGameState(s);
-            setCurrentQuestionIndex(s.questionNumber || 1);
+            currentQuestionIndex.current = s.questionNumber || 1;
           }
         })
         .catch(() => {});
@@ -159,14 +169,17 @@ const AdminStats = () => {
     s.on("gameState", (st) => {
       if (st) {
         setGameState(st);
-        if (st.questionNumber && st.questionNumber !== currentQuestionIndex) {
-          setCurrentQuestionIndex(st.questionNumber);
+        if (
+          st.questionNumber &&
+          st.questionNumber !== currentQuestionIndex.current
+        ) {
+          currentQuestionIndex.current = st.questionNumber;
         }
       }
     });
     s.on("newQuestion", (payload) => {
       if (payload?.questionNumber) {
-        setCurrentQuestionIndex(payload.questionNumber);
+        currentQuestionIndex.current = payload.questionNumber;
         setSelected(payload.questionNumber);
       }
     });
@@ -271,9 +284,15 @@ const AdminStats = () => {
             </button>
             <button
               onClick={handleAdvanceQuestion}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600/80 hover:bg-blue-700/80 rounded-lg text-white font-semibold border border-blue-400/20"
+              disabled={isAdvancingQuestion}
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-white font-semibold border border-blue-400/20 ${
+                isAdvancingQuestion
+                  ? "bg-gray-600/80 cursor-not-allowed opacity-50"
+                  : "bg-blue-600/80 hover:bg-blue-700/80"
+              }`}
             >
-              <ArrowRight size={18} /> Next Question
+              <ArrowRight size={18} />
+              {isAdvancingQuestion ? "Advancing..." : "Next Question"}
             </button>
             <div className="ml-auto"></div>
             <button
