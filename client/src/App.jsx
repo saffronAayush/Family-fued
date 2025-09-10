@@ -15,7 +15,9 @@ function App() {
           {adminView === "dashboard" ? <AdminDashboard /> : <AdminStats />}
           <div className="fixed bottom-4 right-4 flex gap-2">
             <button
-              onClick={() => setAdminView(adminView === "dashboard" ? "stats" : "dashboard")}
+              onClick={() =>
+                setAdminView(adminView === "dashboard" ? "stats" : "dashboard")
+              }
               className="px-4 py-2 bg-blue-600 rounded-lg text-white"
             >
               {adminView === "dashboard" ? "Go to Stats" : "Go to Dashboard"}
@@ -31,12 +33,6 @@ function App() {
       ) : (
         <>
           <FamilyFeud />
-          <button
-            onClick={() => setIsAdmin(true)}
-            className="fixed bottom-4 right-4 px-4 py-2 bg-yellow-500 rounded-lg"
-          >
-            Switch to Admin
-          </button>
         </>
       )}
     </div>

@@ -3,9 +3,12 @@ import axios from "axios";
 import { server } from "../constant";
 import { io } from "socket.io-client";
 import { Users, BarChart3 } from "lucide-react";
+import { Navigate } from "react-router-dom";
 
 const AdminStats = () => {
-  const [questions, setQuestions] = useState([1,2,3]);
+  console.log("in admin stats");
+  const [token, setToken] = useState(localStorage.getItem("adminToken"));
+  const [questions, setQuestions] = useState([1, 2, 3]);
   const [selected, setSelected] = useState(1);
   const [data, setData] = useState(null);
   const [totalParticipants, setTotalParticipants] = useState(0);
@@ -50,9 +53,11 @@ const AdminStats = () => {
 
   const maxOptionCount = useMemo(() => {
     if (!data || !data.answers?.length) return 0;
-    return Math.max(...data.answers.map(a => a.optionCount || 0));
+    return Math.max(...data.answers.map((a) => a.optionCount || 0));
   }, [data]);
-
+  if (!token) {
+    return <Navigate to={"/admin"} />;
+  }
   return (
     <div className="min-h-screen w-full p-6 bg-gradient-to-br from-purple-950 via-blue-950 to-black text-white">
       <div className="max-w-5xl mx-auto">
@@ -65,24 +70,32 @@ const AdminStats = () => {
               </div>
               <div>
                 <h1 className="text-2xl font-bold">Admin Stats</h1>
-                <p className="text-blue-300/80 text-sm">Live submissions per option by question</p>
+                <p className="text-blue-300/80 text-sm">
+                  Live submissions per option by question
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <label className="text-sm text-blue-300/80">Select Question:</label>
+              <label className="text-sm text-blue-300/80">
+                Select Question:
+              </label>
               <select
                 value={selected}
                 onChange={(e) => setSelected(Number(e.target.value))}
                 className="bg-blue-950/40 border border-blue-400/30 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400/50"
               >
                 {questions.map((q) => (
-                  <option key={q} value={q}>{q}</option>
+                  <option key={q} value={q}>
+                    {q}
+                  </option>
                 ))}
               </select>
             </div>
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-2">
-            <span className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/10 border border-blue-500/30 text-blue-300">Q#{selected}</span>
+            <span className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/10 border border-blue-500/30 text-blue-300">
+              Q#{selected}
+            </span>
             <span className="px-3 py-1 rounded-full text-xs font-semibold bg-purple-500/10 border border-purple-500/30 text-purple-300 inline-flex items-center gap-1">
               <Users size={14} /> {liveUsers}
             </span>
@@ -93,20 +106,35 @@ const AdminStats = () => {
           <div className="text-center text-blue-200/80">Loading…</div>
         ) : (
           <div className="bg-blue-900/15 rounded-2xl p-6 backdrop-blur-md border border-blue-400/20 shadow-xl">
-            <h2 className="text-xl font-semibold mb-2">Q{data.questionNumber}: {data.question}</h2>
-            <p className="text-sm text-blue-300/80 mb-4">Total participants: {totalParticipants}</p>
+            <h2 className="text-xl font-semibold mb-2">
+              Q{data.questionNumber}: {data.question}
+            </h2>
+            <p className="text-sm text-blue-300/80 mb-4">
+              Total participants: {totalParticipants}
+            </p>
             <div className="space-y-3">
               {data.answers.map((a) => {
-                const pct = maxOptionCount ? Math.round(((a.optionCount||0) / maxOptionCount) * 100) : 0;
+                const pct = maxOptionCount
+                  ? Math.round(((a.optionCount || 0) / maxOptionCount) * 100)
+                  : 0;
                 return (
-                  <div key={a.optionNumber} className="relative bg-blue-950/30 border-2 border-blue-700 rounded-xl p-4 hover:bg-blue-900/30 transition-colors">
-                    
+                  <div
+                    key={a.optionNumber}
+                    className="relative bg-blue-950/30 border-2 border-blue-700 rounded-xl p-4 hover:bg-blue-900/30 transition-colors"
+                  >
                     <div className="flex justify-between items-center text-sm mb-2 pl-6">
-                      <span className="font-medium text-blue-100">{a.text}</span>
-                      <span className="font-semibold text-blue-200">{a.optionCount}</span>
+                      <span className="font-medium text-blue-100">
+                        {a.text}
+                      </span>
+                      <span className="font-semibold text-blue-200">
+                        {a.optionCount}
+                      </span>
                     </div>
                     <div className="w-full h-2 bg-blue-900/30 rounded overflow-hidden">
-                      <div className="h-2 bg-gradient-to-r from-blue-500 via-blue-400 to-purple-400 rounded" style={{width: `${pct}%`}}></div>
+                      <div
+                        className="h-2 bg-gradient-to-r from-blue-500 via-blue-400 to-purple-400 rounded"
+                        style={{ width: `${pct}%` }}
+                      ></div>
                     </div>
                   </div>
                 );
