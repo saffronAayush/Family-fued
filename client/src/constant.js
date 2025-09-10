@@ -2,6 +2,54 @@
 // Prefer env var; fall back to localhost:8000 to match backend default
 export const server = import.meta.env.VITE_SERVER || "http://localhost:3000";
 
+export const gameData = [
+  {
+    question: "What's the most common breakup reason in college?",
+    answers: [
+      "Exams 📚",
+      "Long distance 🛣️",
+      "Found someone new 👀",
+      "Family pressure 👵",
+      "Caught by warden 🚨",
+      "Money 💸",
+      "Cheating 💔",
+      "No time ⏰",
+      "Too clingy 😬",
+      "Boring 😴",
+    ],
+  },
+  {
+    question: "What do students actually mean by 'group study'?",
+    answers: [
+      "Netflix 🍿",
+      "Cards 🎲",
+      "Snacks 🍔",
+      "Gossip 🗣️",
+      "Sleep 💤",
+      "Music 🎶",
+      "Movies 🎬",
+      "Romance 😉",
+      "Memes 😂",
+      "Private tuitions 😏",
+    ],
+  },
+  {
+    question: "Name a place on campus where couples are always spotted.",
+    answers: [
+      "Canteen 🍵",
+      "Garden 🌹",
+      "Library 📚",
+      "Rooftop 🌌",
+      "Parking 🛵",
+      "Stairs 🪜",
+      "Empty class 🏫",
+      "Hostel room 🛏️",
+      "Cafe ☕",
+      "Corridor 🚶",
+    ],
+  },
+];
+
 export const gameResults = [
   {
     question: "What's the most common breakup reason in college?",

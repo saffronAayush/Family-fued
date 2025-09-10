@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { server } from "../constant";
-import { ArrowRight, X, CheckCircle2, Users, Play, RefreshCcw } from "lucide-react";
+import { X, CheckCircle2, Users } from "lucide-react";
 import { io } from "socket.io-client";
 
 const AdminDashboard = () => {
@@ -10,7 +10,10 @@ const AdminDashboard = () => {
   const [revealedAnswers, setRevealedAnswers] = useState([]);
   const [showCross, setShowCross] = useState(false);
   const [isGameComplete, setIsGameComplete] = useState(false);
-  const [gameState, setGameState] = useState({ isOpen: false, questionNumber: 1 });
+  const [gameState, setGameState] = useState({
+    isOpen: false,
+    questionNumber: 1,
+  });
   const [totalParticipants, setTotalParticipants] = useState(0);
   const [token, setToken] = useState(localStorage.getItem("adminToken"));
   const [password, setPassword] = useState("");
@@ -22,16 +25,19 @@ const AdminDashboard = () => {
   useEffect(() => {
     if (token) {
       // Load current game state first
-      axios.get(`${server}/api/state`).then((res) => {
-        if (res.data?.success) {
-          const s = res.data.state || {};
-          setGameState(s);
-          setCurrentQuestionIndex(s.questionNumber || 1);
-          fetchQuestion(s.questionNumber || currentQuestionIndex);
-        } else {
-          fetchQuestion(currentQuestionIndex);
-        }
-      }).catch(() => fetchQuestion(currentQuestionIndex));
+      axios
+        .get(`${server}/api/state`)
+        .then((res) => {
+          if (res.data?.success) {
+            const s = res.data.state || {};
+            setGameState(s);
+            setCurrentQuestionIndex(s.questionNumber || 1);
+            fetchQuestion(s.questionNumber || currentQuestionIndex);
+          } else {
+            fetchQuestion(currentQuestionIndex);
+          }
+        })
+        .catch(() => fetchQuestion(currentQuestionIndex));
     }
   }, [token, currentQuestionIndex]);
 
@@ -74,7 +80,9 @@ const AdminDashboard = () => {
         if (!prev) return prev;
         const next = { ...prev, answers: prev.answers.map((a) => ({ ...a })) };
         const idx = next.answers.findIndex((a) => a.optionNumber === opt);
-        if (idx >= 0) next.answers[idx].optionCount = (next.answers[idx].optionCount || 0) + 1;
+        if (idx >= 0)
+          next.answers[idx].optionCount =
+            (next.answers[idx].optionCount || 0) + 1;
         return next;
       });
     });
@@ -113,9 +121,7 @@ const AdminDashboard = () => {
         const answer = questionData.answers[index];
         if (
           answer &&
-          !revealedAnswers.some(
-            (ra) => ra.optionNumber === answer.optionNumber
-          )
+          !revealedAnswers.some((ra) => ra.optionNumber === answer.optionNumber)
         ) {
           setRevealedAnswers((prev) => [...prev, answer]);
         }
@@ -142,74 +148,6 @@ const AdminDashboard = () => {
       setError("Invalid admin password. Please try again.");
       setPassword("");
     }
-  };
-
-  const handleAdvanceQuestion = async () => {
-    try {
-      // Emit to participants
-  await axios.post(`${server}/api/emitNext`, {
-        questionNumber: currentQuestionIndex + 1,
-      });
-
-      setCurrentQuestionIndex((prev) => prev + 1);
-      setRevealedAnswers([]);
-
-      // If no more questions, mark complete
-      if (currentQuestionIndex >= 5) {
-        setIsGameComplete(true);
-      }
-    } catch (err) {
-      console.error("Error advancing question:", err.message);
-    }
-  };
-
-  const handleStartGame = async () => {
-    try {
-      // Try the start endpoint first
-      try {
-        const res = await axios.post(`${server}/api/start`, {
-          questionNumber: currentQuestionIndex,
-        });
-        if (res.data?.success) {
-          setGameState(res.data.state);
-          return;
-        }
-      } catch (err) {
-        // Fallback: use emitNext (auto-opens game on server and broadcasts)
-        await axios.post(`${server}/api/emitNext`, {
-          questionNumber: currentQuestionIndex,
-        });
-        setGameState({ isOpen: true, questionNumber: currentQuestionIndex });
-      }
-    } catch (e) {
-      console.error("Failed to start game", e.message);
-    }
-  };
-
-  const handleResetGame = async () => {
-    try {
-      const res = await axios.post(`${server}/api/reset`);
-      if (res.data?.success) {
-        setGameState(res.data.state);
-        setCurrentQuestionIndex(1);
-        setRevealedAnswers([]);
-        setIsGameComplete(false);
-        fetchQuestion(1);
-      }
-    } catch (e) {
-      console.error("Failed to reset game", e.message);
-    }
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem("adminToken");
-    setToken(null);
-    setPassword("");
-    setError("");
-    setCurrentQuestionIndex(1);
-    setRevealedAnswers([]);
-    setIsGameComplete(false);
-    setQuestionData(null);
   };
 
   if (!token) {
@@ -273,55 +211,40 @@ const AdminDashboard = () => {
           <div className="rounded-2xl border border-blue-400/20 bg-blue-900/10 backdrop-blur-md p-4 md:p-6 shadow-2xl">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
               <div>
-                <h1 className="text-3xl font-bold text-white">Admin Dashboard</h1>
-                <p className="text-blue-300/80 text-sm mt-1">Control the game, monitor answers, and advance questions in real time.</p>
+                <h1 className="text-3xl font-bold text-white">
+                  Admin Dashboard
+                </h1>
+                <p className="text-blue-300/80 text-sm mt-1">
+                  Control the game, monitor answers, and advance questions in
+                  real time.
+                </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${gameState?.isOpen ? "bg-green-500/20 border-green-500/30 text-green-300" : "bg-red-500/20 border-red-500/30 text-red-300"}`}>
+                <span
+                  className={`px-3 py-1 rounded-full text-xs font-semibold border ${
+                    gameState?.isOpen
+                      ? "bg-green-500/20 border-green-500/30 text-green-300"
+                      : "bg-red-500/20 border-red-500/30 text-red-300"
+                  }`}
+                >
                   {gameState?.isOpen ? "Game Open" : "Game Closed"}
                 </span>
                 <span className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/10 border border-blue-500/30 text-blue-300">
                   Q#{currentQuestionIndex}
                 </span>
-                <span className="px-3 py-1 rounded-full text-xs font-semibold bg-purple-500/10 border border-purple-500/30 text-purple-300 inline-flex items-center gap-1" title="Live users">
+                <span
+                  className="px-3 py-1 rounded-full text-xs font-semibold bg-purple-500/10 border border-purple-500/30 text-purple-300 inline-flex items-center gap-1"
+                  title="Live users"
+                >
                   <Users size={14} /> {liveUsers}
                 </span>
               </div>
             </div>
-            <div className="mt-4 flex flex-wrap gap-3">
-              <button
-                onClick={handleStartGame}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-green-600/80 hover:bg-green-700/80 rounded-lg text-white font-semibold border border-green-400/20"
-              >
-                <Play size={16} /> Open/Sync Game
-              </button>
-              <button
-                onClick={handleResetGame}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-yellow-600/80 hover:bg-yellow-700/80 rounded-lg text-white font-semibold border border-yellow-400/20"
-              >
-                <RefreshCcw size={16} /> Reset
-              </button>
-              <button
-                onClick={handleAdvanceQuestion}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600/80 hover:bg-blue-700/80 rounded-lg text-white font-semibold border border-blue-400/20"
-              >
-                <ArrowRight size={18} /> Next Question
-              </button>
-              <div className="ml-auto"></div>
-              <button
-                onClick={handleLogout}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-red-600/80 hover:bg-red-700/80 rounded-lg text-white font-semibold border border-red-400/20"
-              >
-                Logout
-              </button>
-            </div>
           </div>
         </div>
 
-        
-
-  {/* Current Question */}
-  <div className="bg-blue-900/15 rounded-2xl p-6 mb-8 backdrop-blur-md border border-blue-400/20 shadow-xl">
+        {/* Current Question */}
+        <div className="bg-blue-900/15 rounded-2xl p-6 mb-8 backdrop-blur-md border border-blue-400/20 shadow-xl">
           <h2 className="text-xl font-semibold text-white mb-2">
             Question {questionData.questionNumber}
           </h2>

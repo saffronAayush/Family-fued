@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { server } from "../constant";
 import { io } from "socket.io-client";
-import { Users, BarChart3 } from "lucide-react";
+import { Users, BarChart3, ArrowRight, Play, RefreshCcw } from "lucide-react";
 import { Navigate } from "react-router-dom";
 
 const AdminStats = () => {
@@ -13,6 +13,11 @@ const AdminStats = () => {
   const [data, setData] = useState(null);
   const [totalParticipants, setTotalParticipants] = useState(0);
   const [liveUsers, setLiveUsers] = useState(0);
+  const [gameState, setGameState] = useState({
+    isOpen: false,
+    questionNumber: 1,
+  });
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(1);
 
   const load = async (q) => {
     try {
@@ -24,15 +29,101 @@ const AdminStats = () => {
     } catch {}
   };
 
+  const handleAdvanceQuestion = async () => {
+    try {
+      // Emit to participants
+      await axios.post(`${server}/api/emitNext`, {
+        questionNumber: currentQuestionIndex + 1,
+      });
+
+      setCurrentQuestionIndex((prev) => prev + 1);
+      setSelected(currentQuestionIndex + 1);
+    } catch (err) {
+      console.error("Error advancing question:", err.message);
+    }
+  };
+
+  const handleStartGame = async () => {
+    try {
+      // Try the start endpoint first
+      try {
+        const res = await axios.post(`${server}/api/start`, {
+          questionNumber: currentQuestionIndex,
+        });
+        if (res.data?.success) {
+          setGameState(res.data.state);
+          return;
+        }
+      } catch (err) {
+        // Fallback: use emitNext (auto-opens game on server and broadcasts)
+        await axios.post(`${server}/api/emitNext`, {
+          questionNumber: currentQuestionIndex,
+        });
+        setGameState({ isOpen: true, questionNumber: currentQuestionIndex });
+      }
+    } catch (e) {
+      console.error("Failed to start game", e.message);
+    }
+  };
+
+  const handleResetGame = async () => {
+    try {
+      const res = await axios.post(`${server}/api/reset`);
+      if (res.data?.success) {
+        setGameState(res.data.state);
+        setCurrentQuestionIndex(1);
+        setSelected(1);
+        load(1);
+      }
+    } catch (e) {
+      console.error("Failed to reset game", e.message);
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("adminToken");
+    setToken(null);
+  };
+
   useEffect(() => {
     load(selected);
   }, [selected]);
+
+  // Load game state on mount
+  useEffect(() => {
+    if (token) {
+      axios
+        .get(`${server}/api/state`)
+        .then((res) => {
+          if (res.data?.success) {
+            const s = res.data.state || {};
+            setGameState(s);
+            setCurrentQuestionIndex(s.questionNumber || 1);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [token]);
 
   useEffect(() => {
     const s = io(server, { transports: ["websocket"], withCredentials: true });
     s.on("connect", () => {
       // Identify as admin for socket role tracking
       s.emit("register", { role: "admin" });
+    });
+    s.on("gameState", (st) => {
+      if (st) {
+        setGameState(st);
+        if (st.questionNumber && st.questionNumber !== currentQuestionIndex) {
+          setCurrentQuestionIndex(st.questionNumber);
+        }
+      }
+    });
+    s.on("newQuestion", (payload) => {
+      if (payload?.questionNumber) {
+        setCurrentQuestionIndex(payload.questionNumber);
+        setSelected(payload.questionNumber);
+      }
     });
     s.on("optionIncremented", (payload) => {
       if (!payload) return;
@@ -93,12 +184,48 @@ const AdminStats = () => {
             </div>
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-2">
+            <span
+              className={`px-3 py-1 rounded-full text-xs font-semibold border ${
+                gameState?.isOpen
+                  ? "bg-green-500/20 border-green-500/30 text-green-300"
+                  : "bg-red-500/20 border-red-500/30 text-red-300"
+              }`}
+            >
+              {gameState?.isOpen ? "Game Open" : "Game Closed"}
+            </span>
             <span className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/10 border border-blue-500/30 text-blue-300">
               Q#{selected}
             </span>
             <span className="px-3 py-1 rounded-full text-xs font-semibold bg-purple-500/10 border border-purple-500/30 text-purple-300 inline-flex items-center gap-1">
               <Users size={14} /> {liveUsers}
             </span>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <button
+              onClick={handleStartGame}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-green-600/80 hover:bg-green-700/80 rounded-lg text-white font-semibold border border-green-400/20"
+            >
+              <Play size={16} /> Open/Sync Game
+            </button>
+            <button
+              onClick={handleResetGame}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-yellow-600/80 hover:bg-yellow-700/80 rounded-lg text-white font-semibold border border-yellow-400/20"
+            >
+              <RefreshCcw size={16} /> Reset
+            </button>
+            <button
+              onClick={handleAdvanceQuestion}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600/80 hover:bg-blue-700/80 rounded-lg text-white font-semibold border border-blue-400/20"
+            >
+              <ArrowRight size={18} /> Next Question
+            </button>
+            <div className="ml-auto"></div>
+            <button
+              onClick={handleLogout}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-red-600/80 hover:bg-red-700/80 rounded-lg text-white font-semibold border border-red-400/20"
+            >
+              Logout
+            </button>
           </div>
         </div>
 

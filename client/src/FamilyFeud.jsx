@@ -1,56 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { server } from "./constant";
+import { gameData, server } from "./constant";
 import { io } from "socket.io-client";
 import { User, CheckCircle2, ArrowRight } from "lucide-react";
 
 // --- Game Data ---
-const gameData = [
-  {
-    question: "What's the most common breakup reason in college?",
-    answers: [
-      "Exams 📚",
-      "Long distance 🛣️",
-      "Found someone new 👀",
-      "Family pressure 👵",
-      "Caught by warden 🚨",
-      "Money 💸",
-      "Cheating 💔",
-      "No time ⏰",
-      "Too clingy 😬",
-      "Boring 😴",
-    ],
-  },
-  {
-    question: "What do students actually mean by 'group study'?",
-    answers: [
-      "Netflix 🍿",
-      "Cards 🎲",
-      "Snacks 🍔",
-      "Gossip 🗣️",
-      "Sleep 💤",
-      "Music 🎶",
-      "Movies 🎬",
-      "Romance 😉",
-      "Memes 😂",
-      "Private tuitions 😏",
-    ],
-  },
-  {
-    question: "Name a place on campus where couples are always spotted.",
-    answers: [
-      "Canteen 🍵",
-      "Garden 🌹",
-      "Library 📚",
-      "Rooftop 🌌",
-      "Parking 🛵",
-      "Stairs 🪜",
-      "Empty class 🏫",
-      "Hostel room 🛏️",
-      "Cafe ☕",
-      "Corridor 🚶",
-    ],
-  },
-];
 
 const FamilyFeudGame = () => {
   const [step, setStep] = useState("username"); // 'username', 'playing', 'thankyou'
@@ -63,7 +16,10 @@ const FamilyFeudGame = () => {
 
   // Connect to socket and subscribe to game state
   useEffect(() => {
-    const socket = io(server, { transports: ["websocket"], withCredentials: true });
+    const socket = io(server, {
+      transports: ["websocket"],
+      withCredentials: true,
+    });
 
     socket.on("connect", () => {
       // Identify as a participant so server can track live users
@@ -90,7 +46,7 @@ const FamilyFeudGame = () => {
 
     socket.on("newQuestion", (payload) => {
       if (payload?.questionNumber) {
-  setIsOpen(true);
+        setIsOpen(true);
         const qNum = Number(payload.questionNumber);
         // If admin moved beyond last question -> complete
         if (qNum > gameData.length) {
@@ -110,24 +66,29 @@ const FamilyFeudGame = () => {
     });
 
     // On mount fetch current state once as well
-    fetch(`${server}/api/state`).then((r) => r.json()).then((d) => {
-      if (d?.success && d.state) {
-        setIsOpen(!!d.state.isOpen);
-        setCurrentQuestion(Math.max(0, Number(d.state.questionNumber || 1) - 1));
-        if (!d.state.isOpen) {
-          localStorage.removeItem("familyFeudCompleted");
-          setIsCompleted(false);
-          setSelectedAnswers([]);
-          setSubmitted(false);
-          setStep("username");
+    fetch(`${server}/api/state`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (d?.success && d.state) {
+          setIsOpen(!!d.state.isOpen);
+          setCurrentQuestion(
+            Math.max(0, Number(d.state.questionNumber || 1) - 1)
+          );
+          if (!d.state.isOpen) {
+            localStorage.removeItem("familyFeudCompleted");
+            setIsCompleted(false);
+            setSelectedAnswers([]);
+            setSubmitted(false);
+            setStep("username");
+          }
         }
-      }
-    }).catch(() => {
-      // If state endpoint not available, wait for socket event instead
-      setTimeout(() => {}, 0);
-    });
+      })
+      .catch(() => {
+        // If state endpoint not available, wait for socket event instead
+        setTimeout(() => {}, 0);
+      });
 
-  return () => socket.close();
+    return () => socket.close();
   }, []);
 
   // Check localStorage on mount (if already completed)
@@ -141,10 +102,10 @@ const FamilyFeudGame = () => {
 
   const handleStartGame = (e) => {
     e.preventDefault();
-  if (!username.trim()) return;
-  if (!isOpen) return; // prevent starting before admin opens
-  setStep("playing");
-  window.scrollTo({ top: 0, behavior: "smooth" });
+    if (!username.trim()) return;
+    if (!isOpen) return; // prevent starting before admin opens
+    setStep("playing");
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handleSelectAnswer = (answerText) => {
@@ -160,7 +121,7 @@ const FamilyFeudGame = () => {
         gameData[currentQuestion].answers.indexOf(selectedAnswer) + 1;
 
       // Send result to backend
-  fetch(`${server}/api/submit`, {
+      fetch(`${server}/api/submit`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -184,7 +145,7 @@ const FamilyFeudGame = () => {
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-center p-2 md:p-4 font-sans text-white">
       {/* --- Username Input Screen --- */}
-  {step === "username" && (
+      {step === "username" && (
         <form
           onSubmit={handleStartGame}
           className="w-full max-w-md mx-auto bg-blue-950/20 backdrop-blur-md rounded-2xl shadow-2xl p-4 md:p-8 border border-blue-400/20"
@@ -194,7 +155,8 @@ const FamilyFeudGame = () => {
               IOTA FEUD
             </h1>
             <p className="text-center text-white/80">
-              Enter your name to join. {isOpen ? "" : "(Waiting for admin to start)"}
+              Enter your name to join.{" "}
+              {isOpen ? "" : "(Waiting for admin to start)"}
             </p>
           </div>
           <div className="relative">
