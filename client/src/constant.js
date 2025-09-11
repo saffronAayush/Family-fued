@@ -20,21 +20,6 @@ export const gameData = [
     ],
   },
   {
-    question: "What do students actually mean by 'group study'?",
-    answers: [
-      "Netflix 🍿",
-      "Cards 🎲",
-      "Snacks 🍔",
-      "Gossip 🗣️",
-      "Sleep 💤",
-      "Music 🎶",
-      "Movies 🎬",
-      "Romance 😉",
-      "Memes 😂",
-      "Private tuitions 😏",
-    ],
-  },
-  {
     question: "Name a place on campus where couples are always spotted.",
     answers: [
       "Canteen 🍵",
@@ -47,6 +32,21 @@ export const gameData = [
       "Hostel room 🛏️",
       "Cafe ☕",
       "Corridor 🚶",
+    ],
+  },
+  {
+    question: "Where do most ideas for startups come from?",
+    answers: [
+      "College dorms 🛏",
+      "Shower thoughts 🚿",
+      "Frustration at work 😤",
+      "Hackathons ⌨",
+      "Copied from Silicon Valley 🌴",
+      "Night-long coding sessions 🌌",
+      "Pitch competitions 🎤",
+      "Accidental side projects 🎲",
+      "Breakups 💔",
+      "Drunk conversations 🍺",
     ],
   },
 ];
